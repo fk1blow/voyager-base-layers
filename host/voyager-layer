@@ -16,8 +16,6 @@ Usage:
   voyager-layer toggle           # flip between the two
   voyager-layer status           # print the currently active layer
   voyager-layer 3                # jump to any layer by index
-  voyager-layer leds             # stay running: keep status LEDs dark on both
-                                 # base layers (stock firmware only, see below)
   voyager-layer events [SECS]    # debug: print what the keyboard sends (default 10 s)
 
 With the custom firmware from this repo, every switch to a base layer also
@@ -38,7 +36,6 @@ import glob
 import os
 import select
 import shutil
-import signal
 import subprocess
 import sys
 import time
@@ -57,8 +54,6 @@ EPSIZE = 32
 
 CMD_PAIRING_INIT = 0x01
 CMD_SET_LAYER = 0x04
-CMD_SET_STATUS_LED = 0x07
-CMD_STATUS_LED_CONTROL = 0x0A
 EVT_PAIRING_SUCCESS = 0x04
 EVT_LAYER = 0x05
 
@@ -328,64 +323,6 @@ def connect(wait):
         time.sleep(0.3)
 
 
-def watch_leds(quiet_layers):
-    """Own the status LEDs: dark on the base layers, binary layer number otherwise.
-
-    For STOCK firmware only. The custom firmware already keeps the LEDs dark
-    on both bases, and it clears the pairing flag on every base switch, which
-    would stop this watcher from receiving layer events.
-
-    Runs until killed. Survives unplug/replug and sleep by reconnecting.
-    On exit, hands the LEDs back to the firmware.
-    """
-    t = None
-
-    def release(*_):
-        if t is not None:
-            try:
-                send(t, [CMD_STATUS_LED_CONTROL, 0])  # firmware takes over again
-                t.close()
-            except OSError:
-                pass
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, release)
-    signal.signal(signal.SIGHUP, release)
-
-    try:
-        while True:
-            t, current = connect(float("inf"))
-            print(f"connected ({t.path}), keeping LEDs dark on layers "
-                  f"{sorted(quiet_layers)}", flush=True)
-            shown = None
-
-            def apply(layer):
-                nonlocal shown
-                bits = 0 if layer is None or layer in quiet_layers else layer & 0x0F
-                if bits == shown:
-                    return
-                for i in range(4):
-                    send(t, [CMD_SET_STATUS_LED, i, (bits >> i) & 1])
-                shown = bits
-
-            try:
-                apply(current)
-                while True:
-                    data = t.read(1.0)
-                    if data and data[0] == EVT_LAYER:
-                        apply(data[1])
-            except OSError as e:
-                print(f"lost keyboard ({e}); waiting for it to come back", flush=True)
-                try:
-                    t.close()
-                except OSError:
-                    pass
-                t = None
-                time.sleep(1)
-    except KeyboardInterrupt:
-        release()
-
-
 def notify(enabled, msg):
     if not enabled:
         return
@@ -438,7 +375,7 @@ def main():
     names = {v: k for k, v in layers.items()}
 
     ap = argparse.ArgumentParser(description="Switch ZSA keyboard base layer without Keymapp")
-    ap.add_argument("target", help=f"{' | '.join(layers)} | toggle | status | leds | events | <layer index>")
+    ap.add_argument("target", help=f"{' | '.join(layers)} | toggle | status | events | <layer index>")
     ap.add_argument("seconds", nargs="?", type=float, default=10.0, help="for `events`: how long to listen")
     ap.add_argument("--wait", type=float, default=0.0, help="seconds to wait for the keyboard")
     ap.add_argument("--notify", action="store_true", help="show a desktop notification")
@@ -446,10 +383,6 @@ def main():
 
     def label(n):
         return f"{names.get(n, 'layer')} ({n})" if n is not None else "unknown"
-
-    if args.target == "leds":
-        watch_leds(set(layers.values()))
-        return
 
     if args.target not in layers and args.target not in ("toggle", "status", "events") \
             and not args.target.isdigit():

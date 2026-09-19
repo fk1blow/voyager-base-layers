@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 # Install voyager-layer / voyager-test and their OS integration. PLAN.md §7.4.
 #
-#   install.sh [--keybind] [--leds] [--uninstall] [--dry-run]
+#   install.sh [--keybind] [--uninstall] [--dry-run]
 #
 # Idempotent: re-running changes nothing that is already in place.
 set -euo pipefail
 
 KEYBIND=0
-LEDS=0
 UNINSTALL=0
 DRY_RUN=0
 for arg in "$@"; do
     case "$arg" in
         --keybind)   KEYBIND=1 ;;
-        --leds)      LEDS=1 ;;
         --uninstall) UNINSTALL=1 ;;
         --dry-run)   DRY_RUN=1 ;;
         -h|--help)
@@ -49,7 +47,6 @@ sudo_run() {
 
 UDEV_RULE=/etc/udev/rules.d/70-zsa-voyager.rules
 USER_UNIT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/systemd/user"
-PLIST="$HOME/Library/LaunchAgents/com.voyager.leds.plist"
 
 # ---------------------------------------------------------------- uninstall
 if [ "$UNINSTALL" -eq 1 ]; then
@@ -61,10 +58,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
         fi
     done
     if [ "$OS" = linux ]; then
-        if systemctl --user list-unit-files voyager-leds.service >/dev/null 2>&1; then
-            run systemctl --user disable --now voyager-leds.service || true
-        fi
-        for u in voyager-omarchy.service voyager-leds.service; do
+        for u in voyager-omarchy.service; do
             if [ -f "$USER_UNIT_DIR/$u" ]; then
                 run rm -f "$USER_UNIT_DIR/$u"
                 say "   removed $USER_UNIT_DIR/$u"
@@ -75,11 +69,6 @@ if [ "$UNINSTALL" -eq 1 ]; then
             say "   removing $UDEV_RULE (needs sudo)"
             sudo_run rm -f "$UDEV_RULE"
             sudo_run udevadm control --reload
-        fi
-    else
-        if [ -f "$PLIST" ]; then
-            run launchctl unload "$PLIST" 2>/dev/null || true
-            run rm -f "$PLIST" && say "   removed $PLIST"
         fi
     fi
     say ""
@@ -139,23 +128,11 @@ if [ "$OS" = linux ]; then
     fi
 
     # ----------------------------------------------------------- user units
-    step "systemd user units"
+    step "systemd user unit"
     run mkdir -p "$USER_UNIT_DIR"
     run install -m 0644 "$HERE/linux/voyager-omarchy.service" "$USER_UNIT_DIR/voyager-omarchy.service"
     say "   $USER_UNIT_DIR/voyager-omarchy.service"
-    if [ "$LEDS" -eq 1 ]; then
-        say ""
-        say "   WARNING: --leds is only useful on STOCK Oryx firmware. With the"
-        say "   custom firmware the LEDs are already dark on both bases and the"
-        say "   board goes quiet after each switch, so the watcher receives"
-        say "   nothing. Installing anyway because you asked."
-        run install -m 0644 "$HERE/linux/voyager-leds.service" "$USER_UNIT_DIR/voyager-leds.service"
-        run systemctl --user daemon-reload
-        run systemctl --user enable --now voyager-leds.service
-        say "   enabled voyager-leds.service"
-    else
-        run systemctl --user daemon-reload
-    fi
+    run systemctl --user daemon-reload
 
     # ------------------------------------------------------------- hyprland
     step "Hyprland"
@@ -202,21 +179,8 @@ else
     step "hidapi backend"
     run "$BIN_DIR/voyager-layer" --setup
 
-    step "LaunchAgent"
-    if [ "$LEDS" -eq 1 ]; then
-        say "   WARNING: --leds is only useful on STOCK Oryx firmware."
-        run mkdir -p "$(dirname "$PLIST")"
-        if [ "$DRY_RUN" -eq 0 ]; then
-            sed "s|__HOME__|$HOME|g" "$HERE/macos/com.voyager.leds.plist" > "$PLIST"
-            launchctl unload "$PLIST" 2>/dev/null || true
-            launchctl load "$PLIST"
-        fi
-        say "   installed and loaded $PLIST"
-    else
-        say "   skipped (pass --leds to install the stock-firmware LED watcher)"
-    fi
-    say ""
-    say "   Nothing else runs automatically on macOS. The board powers up on"
+    step "Automatic switching"
+    say "   Nothing runs automatically on macOS. The board powers up on"
     say "   layer 0 (mac). NOTE: if your dock switches hosts WITHOUT cutting"
     say "   power, the board keeps whatever base it was on -- run"
     say "   'voyager-layer mac' after taking the keyboard back, or see"

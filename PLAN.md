@@ -49,9 +49,6 @@ Two parts, usable separately or together, neither treated as second-class:
   - Known trade-off: pressing a `TO()` key for a base layer also clears the flag, so Keymapp's live view
     stops until Keymapp is reopened. Accepted. Don't add code to tell key presses and host commands apart.
 - **Stock firmware keeps working with the scripts**, and just leaves the flag set (that's stock behaviour).
-- **The LED watcher (`voyager-layer leds`) is stock-firmware-only and optional.** It isn't installed by
-  default. With the custom firmware it's pointless (LEDs are already dark) and would stop receiving
-  events after the first base switch.
 - **A Hyprland keybind to toggle layers is optional, not required right now.** Ship it as a commented
   snippet that the installer can enable with a flag.
 
@@ -74,9 +71,7 @@ host/
     install.sh                                 NEW (§7.4)
     linux/70-zsa-voyager.rules                 NEW
     linux/voyager-omarchy.service              NEW (systemd --user, oneshot)
-    linux/voyager-leds.service                 NEW, optional, stock firmware only
     linux/hyprland.conf                        NEW: autostart + optional keybind snippet
-    macos/com.voyager.leds.plist               NEW, optional, stock firmware only
     tests/fw_model.py                          EXISTING: model of firmware + oryx module
     tests/hid.py                               EXISTING: fake hidapi backed by the model
     tests/test_voyager_layer.py                EXISTING: 20 unittest cases, all passing
@@ -273,7 +268,7 @@ The edits the script makes:
 
 ### 7.1 `host/voyager-layer` (exists)
 
-Commands: `mac | omarchy | toggle | status | events [secs] | leds | <n>`.
+Commands: `mac | omarchy | toggle | status | events [secs] | <n>`.
 Options: `--wait SECS`, `--notify`, `--setup`.
 
 **Backends:**
@@ -325,22 +320,20 @@ Tasks:
 - Nothing runs automatically. The board powers up on layer 0 (Mac), and nothing pairs unless I run the
   script or Keymapp.
 - The installer runs `voyager-layer --setup`.
-- Optional LaunchAgent for `leds`, stock firmware only.
 - **Future / optional, don't build it yet:** if my hub turns out to switch computers without cutting
   power, the Mac would need a plug-in trigger, e.g. a Hammerspoon USB watcher running
   `voyager-layer mac`. Just document it.
 
 ### 7.4 `host/install.sh`
 
-`install.sh [--keybind] [--leds] [--uninstall]` detects the OS.
+`install.sh [--keybind] [--uninstall] [--dry-run]` detects the OS.
 - **Always:** copy both scripts to `~/.local/bin`.
 - **Linux:**
   - install the udev rule (sudo, prompt first) and run `udevadm control --reload`,
   - install the user unit and run `daemon-reload`,
   - **print** the Hyprland snippet rather than editing configs silently. With `--keybind`, append it,
     guarded by a marker comment so re-runs don't duplicate it.
-- **macOS:** run `--setup`. With `--leds`, install and load the LaunchAgent (expand `$HOME`).
-- `--leds` prints a warning that it's only useful on stock firmware.
+- **macOS:** run `--setup`.
 - Must be idempotent and pass shellcheck.
 
 ## 8. Phase 4: docs
@@ -354,7 +347,7 @@ Tasks:
 
   | Mode | Firmware | Who switches | LEDs on Omarchy base | Raw HID after a switch | Background software |
   |------|----------|--------------|----------------------|------------------------|---------------------|
-  | Scripts only | stock Oryx | udev / autostart / keybind / CLI | lit (LED 1) | keeps reporting until unplug | none (`leds` watcher optional) |
+  | Scripts only | stock Oryx | udev / autostart / keybind / CLI | lit (LED 1) | keeps reporting until unplug | none |
   | Firmware + scripts (**my setup**) | custom, detection off | udev / autostart / keybind / CLI / `TO()` keys | dark | quiet | none |
   | Firmware only | custom, detection on | the keyboard | dark | quiet | none |
 
