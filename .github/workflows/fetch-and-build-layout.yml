@@ -26,6 +26,10 @@ on:
         description: "Let the firmware pick the base layer from the detected host OS (PLAN.md §6.3). Off by default: a USB hub can fool detection."
         type: boolean
         default: false
+      keyboard_reset:
+        description: "Re-detect the host OS when a KVM or dock changes hosts without cutting power. Implies os_detection."
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -100,6 +104,7 @@ jobs:
         run: |
           ./tools/apply_customizations.sh \
             ${{ github.event.inputs.os_detection == 'true' && '--os-detection' || '' }} \
+            ${{ github.event.inputs.keyboard_reset == 'true' && '--keyboard-reset' || '' }} \
             ${{ github.event.inputs.layout_id }}
 
       - name: Build qmk docker image

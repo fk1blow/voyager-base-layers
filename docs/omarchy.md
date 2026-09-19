@@ -44,8 +44,8 @@ ACTION=="add", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3297", TAG+="systemd", ENV
   Without it `SYSTEMD_USER_WANTS` silently does nothing.
 - The board exposes several hidraw nodes, so the unit may be triggered more than once.
   Harmless: it is a oneshot and switching is idempotent.
-- If Keymapp is installed, its own `50-wally.rules` already sets `MODE:="0666"` on every ZSA
-  device, so access is granted regardless of the `uaccess` line here.
+- If Keymapp is installed, its own udev rules already grant access regardless of the `uaccess`
+  line here — see [protocol.md](protocol.md) for what they do.
 
 ### systemd — the unit udev starts
 
@@ -85,9 +85,10 @@ o.bind("SUPER + CTRL + V", "Toggle Voyager base layer", os.getenv("HOME") .. "/.
 `--notify` shows a desktop notification with the result; drop it if you'd rather rely on the
 per-key amber indicator.
 
-Check the combo is free first — `omarchy menu keybindings --print`. `SUPER CTRL + K` is taken
-by "Herdr keybindings" on a stock Omarchy 4.x install. `install.sh --keybind` appends both
-lines, marked, and refuses if the combo is already bound.
+`SUPER + CTRL + V` is what ships because the originally planned `SUPER + CTRL + K` turned out
+to be taken by "Herdr keybindings". Check your own bindings before committing to either —
+`omarchy menu keybindings --print`. `install.sh --keybind` appends both lines, marked, and
+refuses rather than silently stealing a key that is already bound.
 
 ## Checking it works
 

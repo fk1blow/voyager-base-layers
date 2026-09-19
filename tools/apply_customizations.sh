@@ -9,18 +9,21 @@
 # output so an anchor no longer matches, exit non-zero with a clear message
 # rather than guess. A failed build is wanted; a silently skipped edit is not.
 #
-# Usage: tools/apply_customizations.sh [--dry-run] [--os-detection] [LAYOUT_DIR]
+# Usage: tools/apply_customizations.sh [--dry-run] [--os-detection] [--keyboard-reset] [LAYOUT_DIR]
 set -euo pipefail
 
 MARKER="base-layers: applied by tools/apply_customizations.sh"
 DRY_RUN=0
 OS_DETECTION=0
+KEYBOARD_RESET=0
 LAYOUT_DIR=""
 
 for arg in "$@"; do
     case "$arg" in
         --dry-run) DRY_RUN=1 ;;
         --os-detection) OS_DETECTION=1 ;;
+        # only meaningful with OS detection, so it turns that on too
+        --keyboard-reset) KEYBOARD_RESET=1; OS_DETECTION=1 ;;
         -*) echo "unknown option: $arg" >&2; exit 2 ;;
         *)  LAYOUT_DIR="$arg" ;;
     esac
@@ -51,11 +54,10 @@ for f in "$KEYMAP" "$RULES" "$CONFIG"; do
 done
 [ -f "$LAYOUT_DIR/base_layers.c" ] || die "missing $LAYOUT_DIR/base_layers.c (should be committed)"
 
-if [ "$OS_DETECTION" -eq 1 ]; then
-    VARIANT="$MARKER (os-detection: on)"
-else
-    VARIANT="$MARKER (os-detection: off)"
-fi
+# The variant is recorded in the marker so a tree customized for one set of
+# options is never silently reused for another.
+VARIANT="$MARKER (os-detection: $([ "$OS_DETECTION" -eq 1 ] && echo on || echo off)"
+VARIANT="$VARIANT, keyboard-reset: $([ "$KEYBOARD_RESET" -eq 1 ] && echo on || echo off))"
 
 # A tree customized for the other variant must not be silently reused.
 check_variant() {
@@ -134,11 +136,13 @@ if check_variant "$CONFIG"; then
 else
     if [ "$OS_DETECTION" -eq 1 ]; then DETECT_LINE="#define BASE_LAYERS_OS_DETECTION"
     else DETECT_LINE="// #define BASE_LAYERS_OS_DETECTION      // pick base layer from detected host OS (needs OS_DETECTION_ENABLE)"; fi
+    if [ "$KEYBOARD_RESET" -eq 1 ]; then RESET_LINE="#define OS_DETECTION_KEYBOARD_RESET"
+    else RESET_LINE="// #define OS_DETECTION_KEYBOARD_RESET   // re-detect when a KVM/switch changes hosts without power loss"; fi
     append "$CONFIG" "$(cat <<EOF
 
 // --- $VARIANT ---
 $DETECT_LINE
-// #define OS_DETECTION_KEYBOARD_RESET   // re-detect when a KVM/switch changes hosts without power loss
+$RESET_LINE
 // #define BASE_LAYERS_KEEP_PAIRING      // don't clear the pairing flag on base switches
 EOF
 )"$'\n'
@@ -194,5 +198,5 @@ fi
 if [ "$DRY_RUN" -eq 1 ]; then
     note "dry run: $CHANGES edit(s) would be applied"
 else
-    note "$CHANGES edit(s) applied (os-detection: $([ "$OS_DETECTION" -eq 1 ] && echo on || echo off))"
+    note "$CHANGES edit(s) applied (os-detection: $([ "$OS_DETECTION" -eq 1 ] && echo on || echo off), keyboard-reset: $([ "$KEYBOARD_RESET" -eq 1 ] && echo on || echo off))"
 fi

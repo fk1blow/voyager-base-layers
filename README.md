@@ -62,8 +62,10 @@ they have to be kept in sync by hand — skip it and you get
 `error: asked for mac (0), keyboard reports omarchy (2)`, the two sides disagreeing over stale
 numbers rather than a real firmware bug.
 
-Before flashing, look at the diff the workflow prints for the layout and commit it, so every
-layout change is visible in the repo's history. Then download the `.bin` artifact, flash it
+The workflow commits and pushes the refreshed layout for you, before it builds. What is left
+for you is the diff it prints: read it, and if the change was intentional record it with
+`tools/verify_layout.sh --update` and commit that snapshot — that is what makes the *next*
+run's diff meaningful. Then download the `.bin` artifact, flash it
 with Keymapp, and confirm with `voyager-layer status` that you land on the base you expect and
 that the LEDs stay dark on both.
 

@@ -20,9 +20,11 @@ never means redoing the custom work.
    `host/install.sh` so `~/.config/voyager-layer/config` matches. This is the one change that
    has to land on both sides; if they drift you get
    `error: asked for omarchy (2), keyboard reports …`.
-6. Read the **Verify layout assumptions** step's diff in the workflow log, then commit the
-   refreshed layout and, if the change was intentional, an updated snapshot
-   (`tools/verify_layout.sh --update`).
+6. The workflow has **already committed and pushed** the refreshed layout — it does that
+   before it verifies or builds. Read the diff the **Verify layout assumptions** step printed;
+   if the change was intentional, run `tools/verify_layout.sh --update` locally and commit the
+   updated `tools/layout.snapshot.json`. That snapshot is the only thing left for you to
+   commit, and it is what makes the next run's diff meaningful.
 7. Download the `.bin` artifact and flash it with Keymapp.
 8. Re-check: `voyager-layer status`, LEDs dark on both bases, and the per-key amber indicator
    still following the base.
@@ -83,6 +85,15 @@ it. Identical on the wire.
 | `OS_DETECTION_KEYBOARD_RESET` | re-detect when a KVM or dock changes hosts without power loss |
 | `BASE_LAYERS_KEEP_PAIRING` | do not clear the pairing flag on base switches |
 
+The first two have build flags: run the workflow with `os_detection: true`, and
+`keyboard_reset: true` if a dock hands the board over without cutting power (that one implies
+`os_detection`). Locally the same switches are
+`tools/apply_customizations.sh --os-detection --keyboard-reset`.
+
+`BASE_LAYERS_KEEP_PAIRING` has no flag — it is always emitted commented out. Turning it on
+means hand-editing the generated `config.h` before building, which the build does not
+preserve. Add a flag if you ever need it regularly.
+
 **OS detection is off by default.** It is a heuristic, and a USB hub or dock can fool it. To
 build with it on, run the workflow with `os_detection: true` — that sets both defines. Note
 `config.h` also defines `LAYER_STATE_8BIT`, so the board is capped at 8 layers.
@@ -113,6 +124,18 @@ Two deviations from ZSA's template, both required:
 - **The `oryx` branch had to be created.** The workflow checks it out, but ZSA's copy of the
   template ships only `main`. It was branched from `main` so the merge has shared history.
   Never commit to `oryx` by hand.
+
+## Checking a change without a keyboard
+
+```
+./tools/check.sh
+```
+
+Runs the host tests against the firmware model, compiles `voyager-layer`, `bash -n` and
+shellcheck on every shell script, `verify_layout.sh`, and `apply_customizations.sh --dry-run`.
+
+`.github/workflows/host-tests.yml` runs **this same script** on every push or PR touching
+`host/**` or `tools/**`, so a red check there reproduces locally with one command.
 
 ## Flashing
 

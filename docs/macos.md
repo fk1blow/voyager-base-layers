@@ -36,9 +36,10 @@ Options, in increasing order of effort:
 2. **A USB watcher.** The Mac still sees a USB attach when the dock hands the board over, even
    though the board never lost power. A [Hammerspoon](https://www.hammerspoon.org/)
    `hs.usb.watcher` matching vendor `0x3297` can run `voyager-layer mac` on attach.
-3. **Firmware OS detection.** Build with `os_detection: true` and the keyboard decides for
-   itself. With a power-keeping switch you also want `OS_DETECTION_KEYBOARD_RESET` so it
-   re-detects when the host changes. This is the only option that needs no host software at
+3. **Firmware OS detection.** Build with `os_detection: true` **and** `keyboard_reset: true`
+   — the second is the one that matters for a dock that keeps the board powered, since
+   without it the firmware never re-runs detection when the host changes. It implies the
+   first. This is the only option that needs no host software at
    all — but detection is a heuristic and a dock can fool it, which is why it is off by
    default. See [firmware.md](firmware.md).
 
