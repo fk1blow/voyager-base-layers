@@ -9,10 +9,18 @@ Build on them; don't rewrite them from scratch.
 
 One repo that lets me switch my ZSA Voyager between two base layers:
 
-| Layer | Name      | Used for                       |
-|-------|-----------|--------------------------------|
-| 0     | `mac`     | primary, work, most of the day |
-| 1     | `omarchy` | secondary, Arch + Hyprland     |
+| Layer | Name      | Used for                                  |
+|-------|-----------|-------------------------------------------|
+| 0     | `mac`     | **base** - primary, work, most of the day |
+| 1     | `mac/sys` | reachable only from the Mac base          |
+| 2     | `omarchy` | **base** - secondary, Arch + Hyprland     |
+| 3     | `oma/sys` | reachable only from the Omarchy base      |
+| 4     | `symbols` | shared                                    |
+| 5     | `l nav`   | shared                                    |
+
+The bases are **0 and 2**, not 0 and 1. Layers 1 and 3 each belong to one base and are
+unreachable from the other, so they need no numbering above the bases. Indices live in
+`tools/layers.conf` (§11.1) - never hard-code them.
 
 Two parts, usable separately or together, neither treated as second-class:
 
@@ -30,7 +38,7 @@ Two parts, usable separately or together, neither treated as second-class:
   itself: via udev when the keyboard is plugged in, and via Hyprland autostart at login.
   The Mac needs nothing: the board powers up on layer 0.
 - **Base layers live in QMK's *default layer*, not in `layer_state`.** The custom firmware "folds" any
-  request to turn on layer 0 or 1 (from the script, `TO()` keys, …) into `default_layer_set()`. Effects:
+  request to turn on a base layer (from the script, `TO()` keys, …) into `default_layer_set()`. Effects:
   - the script and the firmware always agree on the active base (see §4.2),
   - the status LEDs stay dark on **both** base layers, because the stock Voyager LED code only looks at
     `layer_state`, while layers 2+ still light the LEDs as usual.
@@ -136,10 +144,10 @@ normally 0, because base layers never sit in it).
 
 ### 4.2 Why the fold hook is required
 
-Without it, once the default layer is 1 (OS detection or a `DF()` key), `voyager-layer mac` does
-`layer_move(0)`, but key lookup uses the highest of `layer_state | default_layer_state`, which is still 1.
+Without it, once the default layer is 2 (OS detection or a `DF()` key), `voyager-layer mac` does
+`layer_move(0)`, but key lookup uses the highest of `layer_state | default_layer_state`, which is still 2.
 The model reproduces this (`Stock.test_default_layer_conflict_is_reported`). The script reports
-`error: asked for mac (0), keyboard reports omarchy (1)`.
+`error: asked for mac (0), keyboard reports omarchy (2)`.
 
 ## 5. Phase 1: repo from the GitHub build template
 
@@ -164,17 +172,22 @@ Keep the edits to Oryx-generated files **minimal and append-only**, so the templ
 
 ### 6.1 `base_layers.h`
 
+No hard-coded indices: §11.1 makes `tools/layers.conf` the single source of truth, and
+`apply_customizations.sh` generates `base_layers_config.h` from it at build time. A build
+without that header must fail loudly rather than fall back to a guess.
+
 ```c
 #pragma once
 #include QMK_KEYBOARD_H
-#ifndef BASE_MAC
-#    define BASE_MAC 0
-#endif
-#ifndef BASE_OMARCHY
-#    define BASE_OMARCHY 1
+#include "base_layers_config.h"   // generated: BASE_MAC, BASE_OMARCHY
+#ifdef COMMUNITY_MODULE_ORYX_ENABLE
+#    include "oryx.h"             // rawhid_state, oryx_layer_event()
 #endif
 layer_state_t base_layers_fold(layer_state_t state);
 ```
+
+`QMK_KEYBOARD_H` does **not** pull the community module header into a plain `SRC` file, so
+`oryx.h` has to be included explicitly, the way `keyboards/zsa/voyager/voyager.c` does.
 
 ### 6.2 `base_layers.c`
 
@@ -276,7 +289,7 @@ Options: `--wait SECS`, `--notify`, `--setup`.
 - macOS uses hidapi in a private venv (`~/.local/share/voyager-layer/venv`). `--setup` creates it, and
   the script re-launches itself inside it automatically.
 
-**Environment variables:** `VOYAGER_LAYERS="mac=0,omarchy=1"` and `VOYAGER_BACKEND=hidraw|hidapi`.
+**Environment variables:** `VOYAGER_LAYERS="mac=0,omarchy=2"` and `VOYAGER_BACKEND=hidraw|hidapi`.
 
 **Switch flow** (`switch()`):
 1. Send SET_LAYER.
@@ -347,7 +360,7 @@ Tasks:
 
   | Mode | Firmware | Who switches | LEDs on Omarchy base | Raw HID after a switch | Background software |
   |------|----------|--------------|----------------------|------------------------|---------------------|
-  | Scripts only | stock Oryx | udev / autostart / keybind / CLI | lit (LED 1) | keeps reporting until unplug | none |
+  | Scripts only | stock Oryx | udev / autostart / keybind / CLI | lit (layer 2 in binary) | keeps reporting until unplug | none |
   | Firmware + scripts (**my setup**) | custom, detection off | udev / autostart / keybind / CLI / `TO()` keys | dark | quiet | none |
   | Firmware only | custom, detection on | the keyboard | dark | quiet | none |
 
@@ -387,8 +400,8 @@ Tasks:
    editor. All should pass, with the LEDs dark on both bases.
 2. **Mac:** hold a key for a layer ≥2 → LEDs light up. Release → dark.
 3. **Mac:** `voyager-layer events 10`, then type → key events show. Then `voyager-layer mac`.
-4. **Omarchy:** plug in through the hub → `voyager-layer status` → `omarchy (1)` within ~1 s, with no manual steps.
-5. **Omarchy:** reboot, log in → `status` → `omarchy (1)`, via autostart.
+4. **Omarchy:** plug in through the hub → `voyager-layer status` → `omarchy (2)` within ~1 s, with no manual steps.
+5. **Omarchy:** reboot, log in → `status` → `omarchy (2)`, via autostart.
 6. **Omarchy:** `voyager-test toggle` → Enter flips the layer, and the editor shows the change each time.
 7. **Omarchy (optional):** the keybind toggles the layer and shows a notification.
 8. **Either OS:** open Keymapp → live view works; a `TO()` key freezes it (expected); reopen → works again.
