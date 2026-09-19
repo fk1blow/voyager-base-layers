@@ -60,12 +60,10 @@ if [ "$UNINSTALL" -eq 1 ]; then
         fi
     done
     if [ "$OS" = linux ]; then
-        for u in voyager-omarchy.service; do
-            if [ -f "$USER_UNIT_DIR/$u" ]; then
-                run rm -f "$USER_UNIT_DIR/$u"
-                say "   removed $USER_UNIT_DIR/$u"
-            fi
-        done
+        if [ -f "$USER_UNIT_DIR/voyager-omarchy.service" ]; then
+            run rm -f "$USER_UNIT_DIR/voyager-omarchy.service"
+            say "   removed $USER_UNIT_DIR/voyager-omarchy.service"
+        fi
         run systemctl --user daemon-reload || true
         if [ -f "$UDEV_RULE" ]; then
             say "   removing $UDEV_RULE (needs sudo)"

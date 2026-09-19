@@ -18,20 +18,22 @@ python3 -m py_compile host/voyager-layer || fail "py_compile host/voyager-layer"
 echo "host/voyager-layer compiles"
 
 step "shell syntax"
+before=$FAILED
 mapfile -t SHELL_FILES < <(printf '%s\n' host/voyager-test host/install.sh tools/*.sh | sort -u)
 for f in "${SHELL_FILES[@]}"; do
     [ -f "$f" ] || { echo "skip $f (not present yet)"; continue; }
     bash -n "$f" || fail "bash -n $f"
 done
-echo "bash -n ok"
+[ "$FAILED" -eq "$before" ] && echo "bash -n ok"
 
 step "shellcheck"
+before=$FAILED
 if command -v shellcheck >/dev/null 2>&1; then
     for f in "${SHELL_FILES[@]}"; do
         [ -f "$f" ] || continue
         shellcheck "$f" || fail "shellcheck $f"
     done
-    echo "shellcheck ok"
+    [ "$FAILED" -eq "$before" ] && echo "shellcheck ok"
 else
     echo "shellcheck not installed - skipping (CI runs it)"
 fi
