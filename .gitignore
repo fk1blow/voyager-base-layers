@@ -1,2 +1,6 @@
 .idea
 *.iml
+
+# Python bytecode from host/tests
+__pycache__/
+*.py[cod]
