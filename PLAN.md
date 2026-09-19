@@ -339,13 +339,14 @@ Tasks:
 
 ### 7.4 `host/install.sh`
 
-`install.sh [--keybind] [--uninstall] [--dry-run]` detects the OS.
+`install.sh [--autostart] [--keybind] [--uninstall] [--dry-run]` detects the OS.
 - **Always:** copy both scripts to `~/.local/bin`.
 - **Linux:**
   - install the udev rule (sudo, prompt first) and run `udevadm control --reload`,
   - install the user unit and run `daemon-reload`,
-  - **print** the Hyprland snippet rather than editing configs silently. With `--keybind`, append it,
-    guarded by a marker comment so re-runs don't duplicate it.
+  - **print** the Hyprland snippet rather than editing configs silently. `--autostart` appends the
+    autostart line; `--keybind` adds the optional toggle key as well (implies `--autostart`).
+    Both detect a line that is already present, however it got there, so re-runs never duplicate.
 - **macOS:** run `--setup`.
 - Must be idempotent and pass shellcheck.
 

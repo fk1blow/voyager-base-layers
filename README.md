@@ -41,6 +41,10 @@ This firmware folds any such request into `default_layer_set()` instead. Three c
   still takes the highest of `layer_state | default_layer_state` — and reports `omarchy (2)`.
 - **The status LEDs stay dark on both bases**, because the stock Voyager LED code only reads
   `layer_state`. Layers that are not bases still light them exactly as before.
+- **Power-up is always Mac.** The hook uses `default_layer_set()`, the RAM-only variant,
+  never the persistent one — nothing is written to EEPROM. So every power cycle comes up on
+  layer 0, whatever base it was on when it lost power. Unplug, replug: Mac, then Omarchy's
+  udev rule switches it back within a second.
 - **The board goes quiet after a switch.** It answers with one LAYER event, then clears its
   pairing flag and stops reporting until something pairs again. This is tidiness, not a
   security feature — see [docs/protocol.md](docs/protocol.md).

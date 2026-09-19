@@ -47,7 +47,16 @@ Once the default layer is 2, `layer_move(0)` leaves the highest at 2, so the key
 Omarchy while the script thinks it asked for Mac. The firmware model reproduces this in
 `Stock.test_default_layer_conflict_is_reported`.
 
-It uses `default_layer_set`, the RAM-only variant — never the persistent one.
+### Power-up is always the Mac base
+
+The hook uses `default_layer_set()`, the RAM-only variant — never
+`set_single_persistent_default_layer()`. Nothing is written to EEPROM, so `default_layer_state`
+always starts at layer 0 after a power cycle, whatever base was active when power was lost.
+
+This is deliberate and worth relying on: a board that loses power is guaranteed to hand the
+Mac the right base, and on Omarchy the udev rule switches it back within a second. It is also
+the reason a dock that switches hosts *without* cutting power needs help — see
+[macos.md](macos.md).
 
 ### Going quiet
 

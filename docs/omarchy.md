@@ -14,7 +14,9 @@ It copies `voyager-layer` and `voyager-test` to `~/.local/bin`, writes
 sudo), installs the systemd user unit, and **prints** the Hyprland snippet without editing
 anything.
 
-`--dry-run` shows what it would do. `--uninstall` backs it out. Re-running is safe.
+`--autostart` appends the Hyprland autostart line for you; `--keybind` adds the toggle key
+too. `--dry-run` shows what it would do, `--uninstall` backs it out. Re-running is safe, and
+both Hyprland edits detect a line that is already there, however it got added.
 
 Note it replaces any dev symlink in `~/.local/bin` with a real copy, so an installed tool does
 not break if the repo moves. If you later edit `host/voyager-layer`, re-run `install.sh`.

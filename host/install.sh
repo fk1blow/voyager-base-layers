@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Install voyager-layer / voyager-test and their OS integration. PLAN.md §7.4.
 #
-#   install.sh [--keybind] [--uninstall] [--dry-run]
+#   install.sh [--autostart] [--keybind] [--uninstall] [--dry-run]
 #
 # Idempotent: re-running changes nothing that is already in place.
 set -euo pipefail
 
+AUTOSTART_OPT=0
 KEYBIND=0
 UNINSTALL=0
 DRY_RUN=0
 for arg in "$@"; do
     case "$arg" in
-        --keybind)   KEYBIND=1 ;;
+        --autostart) AUTOSTART_OPT=1 ;;
+        --keybind)   KEYBIND=1; AUTOSTART_OPT=1 ;;
         --uninstall) UNINSTALL=1 ;;
         --dry-run)   DRY_RUN=1 ;;
         -h|--help)
@@ -139,40 +141,53 @@ if [ "$OS" = linux ]; then
     SNIPPET="$HERE/linux/hyprland.lua"
     AUTOSTART="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/autostart.lua"
     AUTOSTART_LINE="o.exec_on_start(os.getenv(\"HOME\") .. \"/.local/bin/voyager-layer omarchy --wait 5\")"
-    if [ "$KEYBIND" -eq 1 ]; then
-        KEY_COMBO="SUPER + CTRL + V"
-        # Never silently steal a bound key. PLAN.md §7.2 suggests SUPER CTRL + K,
-        # which is already "Herdr keybindings" on at least one Omarchy install.
-        if command -v omarchy >/dev/null 2>&1 \
-           && omarchy menu keybindings --print 2>/dev/null \
-              | grep -qiE "^SUPER +CTRL +\\+? *V\\b"; then
-            echo "install.sh: '$KEY_COMBO' is already bound. Pick a free combo and add the" >&2
-            echo "            keybind line from $SNIPPET by hand." >&2
-            exit 1
-        fi
-        KEY_LINE="o.bind(\"$KEY_COMBO\", \"Toggle Voyager base layer\", os.getenv(\"HOME\") .. \"/.local/bin/voyager-layer toggle --notify\")"
+    if [ "$AUTOSTART_OPT" -eq 1 ]; then
         BINDINGS="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/bindings.lua"
-        if [ ! -f "$AUTOSTART" ] || [ ! -f "$BINDINGS" ]; then
-            say "   Hyprland config not found - add these by hand:"
-            say ""
-            sed 's/^/     /' "$SNIPPET"
-        elif grep -qF "$MARKER" "$AUTOSTART" || grep -qF "$MARKER" "$BINDINGS"; then
-            say "   '$MARKER' block already present - left alone"
+        KEY_COMBO="SUPER + CTRL + V"
+        KEY_LINE="o.bind(\"$KEY_COMBO\", \"Toggle Voyager base layer\", os.getenv(\"HOME\") .. \"/.local/bin/voyager-layer toggle --notify\")"
+
+        # --- autostart line (always, when this branch runs) ---
+        if [ ! -f "$AUTOSTART" ]; then
+            say "   $AUTOSTART not found - add by hand:"
+            say "     $AUTOSTART_LINE"
+        elif grep -qF "voyager-layer omarchy" "$AUTOSTART"; then
+            say "   autostart: already switches to the Omarchy base - left alone"
         elif [ "$DRY_RUN" -eq 1 ]; then
             say "   would append the autostart line to $AUTOSTART"
-            say "   would append '$KEY_COMBO' to $BINDINGS"
         else
             printf '\n-- %s\n%s\n' "$MARKER" "$AUTOSTART_LINE" >> "$AUTOSTART"
-            printf '\n-- %s\n%s\n' "$MARKER" "$KEY_LINE" >> "$BINDINGS"
-            say "   appended to $AUTOSTART and $BINDINGS"
-            say "   validate with: hyprctl reload && hyprctl configerrors"
+            say "   appended the autostart line to $AUTOSTART"
         fi
+
+        # --- keybind (only with --keybind) ---
+        if [ "$KEYBIND" -eq 1 ]; then
+            # Never silently steal a bound key. PLAN.md §7.2 suggests SUPER CTRL + K,
+            # which is "Herdr keybindings" on a stock Omarchy 4.x install.
+            if command -v omarchy >/dev/null 2>&1 \
+               && omarchy menu keybindings --print 2>/dev/null \
+                  | grep -qiE "^SUPER +CTRL +\\+? *V\\b"; then
+                echo "install.sh: '$KEY_COMBO' is already bound. Pick a free combo and add the" >&2
+                echo "            keybind line from $SNIPPET by hand." >&2
+                exit 1
+            fi
+            if [ ! -f "$BINDINGS" ]; then
+                say "   $BINDINGS not found - add the keybind by hand"
+            elif grep -qF "voyager-layer toggle" "$BINDINGS"; then
+                say "   keybind: a toggle binding is already present - left alone"
+            elif [ "$DRY_RUN" -eq 1 ]; then
+                say "   would append '$KEY_COMBO' to $BINDINGS"
+            else
+                printf '\n-- %s\n%s\n' "$MARKER" "$KEY_LINE" >> "$BINDINGS"
+                say "   appended '$KEY_COMBO' to $BINDINGS"
+            fi
+        fi
+        [ "$DRY_RUN" -eq 1 ] || say "   validate with: hyprctl reload && hyprctl configerrors"
     else
         say "   Not editing your Hyprland config. Add this to $AUTOSTART:"
         say ""
         sed 's/^/     /' "$SNIPPET"
         say ""
-        say "   (or re-run with --keybind to have it appended for you)"
+        say "   --autostart appends the autostart line; --keybind adds a toggle key too"
     fi
 else
     # --------------------------------------------------------------- macOS
