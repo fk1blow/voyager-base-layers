@@ -22,6 +22,10 @@ on:
           - planck_ez
           - planck_ez/glow
         default: voyager
+      os_detection:
+        description: "Let the firmware pick the base layer from the detected host OS (PLAN.md §6.3). Off by default: a USB hub can fool detection."
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -93,7 +97,10 @@ jobs:
         run: ./tools/verify_layout.sh ${{ github.event.inputs.layout_id }}
 
       - name: Apply customizations
-        run: ./tools/apply_customizations.sh ${{ github.event.inputs.layout_id }}
+        run: |
+          ./tools/apply_customizations.sh \
+            ${{ github.event.inputs.os_detection == 'true' && '--os-detection' || '' }} \
+            ${{ github.event.inputs.layout_id }}
 
       - name: Build qmk docker image
         run: docker build -t qmk .
