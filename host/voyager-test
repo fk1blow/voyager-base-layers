@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# voyager-test — manual test harness for voyager-layer.
+# The script switches the layer; you do the assertions by typing in an editor.
+#
+#   voyager-test mac        switch to Mac layer, then ask you to verify
+#   voyager-test omarchy    switch to Omarchy layer, then ask you to verify
+#   voyager-test toggle     press Enter to flip layers, q to quit
+#   voyager-test            full round trip: omarchy -> mac -> omarchy, with a summary
+set -uo pipefail
+# Works with macOS's bash 3.2 as well as Linux bash.
+
+# Find voyager-layer: $VOYAGER_LAYER_BIN, next to this script, or on PATH.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${VOYAGER_LAYER_BIN:-}" ]]; then
+  VL="$VOYAGER_LAYER_BIN"
+elif [[ -x "$here/voyager-layer" ]]; then
+  VL="$here/voyager-layer"
+elif command -v voyager-layer >/dev/null; then
+  VL="$(command -v voyager-layer)"
+else
+  echo "voyager-layer not found (put it on PATH or set VOYAGER_LAYER_BIN)" >&2
+  exit 1
+fi
+
+bold=$'\e[1m'; green=$'\e[32m'; red=$'\e[31m'; dim=$'\e[2m'; reset=$'\e[0m'
+passed=0; failed=0
+
+step() { printf '\n%s==> %s%s\n' "$bold" "$*" "$reset"; }
+
+# ask "question" -> returns 0 for yes, 1 for no
+ask() {
+  local answer
+  while true; do
+    read -r -p "$1 [y/n] " answer </dev/tty || return 1
+    case "$(printf '%s' "$answer" | tr '[:upper:]' '[:lower:]')" in
+      y|yes) return 0 ;;
+      n|no)  return 1 ;;
+    esac
+  done
+}
+
+# check <layer>: switch, then have the user confirm in their editor
+check() {
+  local layer="$1"
+  step "Switching to '$layer'"
+  if ! "$VL" "$layer"; then
+    printf '%sFAIL%s  voyager-layer returned an error\n' "$red" "$reset"
+    failed=$((failed + 1)); return
+  fi
+  printf '%sKeyboard reports: %s%s\n' "$dim" "$("$VL" status 2>&1)" "$reset"
+  echo "Go to your text editor and type on the keyboard."
+  echo "Check the keys that differ between your Mac and Omarchy layers,"
+  echo "then come back here."
+  if ask "Does the keyboard behave like the '$layer' layer?"; then
+    printf '%sPASS%s  %s\n' "$green" "$reset" "$layer"
+    passed=$((passed + 1))
+  else
+    printf '%sFAIL%s  %s\n' "$red" "$reset" "$layer"
+    failed=$((failed + 1))
+  fi
+}
+
+toggle_loop() {
+  step "Toggle mode — Enter flips the layer, q + Enter quits"
+  printf 'Currently: %s\n' "$("$VL" status 2>&1)"
+  local key
+  while read -r -p "> " key </dev/tty; do
+    [[ "$key" == [qQ]* ]] && break
+    "$VL" toggle || { echo "toggle failed, stopping" >&2; return 1; }
+  done
+}
+
+summary() {
+  step "Summary"
+  printf '%s%d passed%s, %s%d failed%s\n' "$green" "$passed" "$reset" "$red" "$failed" "$reset"
+  [[ $failed -eq 0 ]]
+}
+
+# Preflight: make sure the keyboard is reachable before asking you anything.
+preflight() {
+  local out
+  if ! out="$("$VL" status 2>&1)"; then
+    printf '%sCannot reach the keyboard:%s\n%s\n' "$red" "$reset" "$out" >&2
+    exit 1
+  fi
+}
+
+case "${1:-all}" in
+  mac|omarchy|toggle|all) preflight ;;
+esac
+
+case "${1:-all}" in
+  mac|omarchy)
+    check "$1"; summary ;;
+  toggle)
+    toggle_loop ;;
+  status)
+    "$VL" status ;;
+  all)
+    step "Starting state: $("$VL" status 2>&1)"
+    check omarchy
+    check mac
+    check omarchy
+    summary ;;
+  -h|--help)
+    sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *)
+    echo "usage: voyager-test [mac|omarchy|toggle|status]" >&2
+    exit 2 ;;
+esac

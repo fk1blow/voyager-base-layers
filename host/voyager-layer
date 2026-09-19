@@ -1,0 +1,449 @@
+#!/usr/bin/env python3
+"""
+voyager-layer — switch the base layer of a ZSA keyboard (Voyager/Moonlander/...)
+over raw HID, using the same Oryx protocol Keymapp uses. No Keymapp, no kontroll.
+
+Backends:
+  Linux  -> /dev/hidraw, stdlib only (default)
+  macOS  -> hidapi. One-time setup:  voyager-layer --setup
+            (creates a private venv in ~/.local/share/voyager-layer and
+             re-launches itself there whenever hidapi isn't importable)
+  Force one with VOYAGER_BACKEND=hidraw|hidapi
+
+Usage:
+  voyager-layer omarchy          # jump to the Omarchy base layer
+  voyager-layer mac              # jump to the Mac base layer
+  voyager-layer toggle           # flip between the two
+  voyager-layer status           # print the currently active layer
+  voyager-layer 3                # jump to any layer by index
+  voyager-layer leds             # stay running: keep status LEDs dark on both
+                                 # base layers (stock firmware only, see below)
+  voyager-layer events [SECS]    # debug: print what the keyboard sends (default 10 s)
+
+With the custom firmware from this repo, every switch to a base layer also
+clears the keyboard's pairing flag, so it stops sending key/layer events until
+something (Keymapp, this script) pairs again. `status` ends the same way when a
+base layer is active.
+Options:
+  --wait SECS    keep retrying until the keyboard shows up (for hotplug/login)
+  --notify       show a desktop notification
+
+Layer indices are 0-based, in the order shown in Oryx. Override without
+editing the file via:  VOYAGER_LAYERS="mac=0,omarchy=2"
+"""
+import argparse
+import glob
+import os
+import select
+import shutil
+import signal
+import subprocess
+import sys
+import time
+
+# ---- config ----------------------------------------------------------------
+DEFAULT_LAYERS = {"mac": 0, "omarchy": 2}
+
+# ---- Oryx protocol (from zsa/qmk_modules oryx/oryx.h) -------------------------
+ZSA_VENDOR_ID = 0x3297
+RAW_USAGE_PAGE = 0xFF60
+EPSIZE = 32
+
+CMD_PAIRING_INIT = 0x01
+CMD_SET_LAYER = 0x04
+CMD_SET_STATUS_LED = 0x07
+CMD_STATUS_LED_CONTROL = 0x0A
+EVT_PAIRING_SUCCESS = 0x04
+EVT_LAYER = 0x05
+
+
+class NotFound(Exception):
+    pass
+
+
+# ---- transports ------------------------------------------------------------
+class HidrawTransport:
+    """Linux: talk to /dev/hidrawN directly. Stdlib only."""
+
+    name = "hidraw"
+
+    @staticmethod
+    def find():
+        page = bytes([0x06, RAW_USAGE_PAGE & 0xFF, RAW_USAGE_PAGE >> 8])
+        for node in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
+            try:
+                with open(f"{node}/device/uevent") as f:
+                    uevent = f.read()
+                with open(f"{node}/device/report_descriptor", "rb") as f:
+                    descriptor = f.read()
+            except OSError:
+                continue
+            hid_id = next(
+                (l.split("=", 1)[1] for l in uevent.splitlines() if l.startswith("HID_ID=")),
+                "",
+            )  # e.g. 0003:00003297:00001977
+            parts = hid_id.split(":")
+            if len(parts) == 3 and int(parts[1], 16) == ZSA_VENDOR_ID and page in descriptor:
+                return "/dev/" + os.path.basename(node)
+        raise NotFound
+
+    def __init__(self, path):
+        self.path = path
+        try:
+            self.fd = os.open(path, os.O_RDWR)
+        except PermissionError:
+            sys.exit(
+                f"error: no permission to open {path}.\n"
+                'Install the udev rule (TAG+="uaccess") and replug the keyboard.'
+            )
+
+    def write(self, report):
+        # hidraw: first byte is the report ID (0 = unnumbered)
+        os.write(self.fd, b"\x00" + report)
+
+    def read(self, timeout):
+        ready, _, _ = select.select([self.fd], [], [], timeout)
+        return os.read(self.fd, 64) if ready else None
+
+    def close(self):
+        os.close(self.fd)
+
+
+class HidapiTransport:
+    """macOS (and anything else): cython-hidapi, `pip install hidapi`."""
+
+    name = "hidapi"
+
+    @staticmethod
+    def _hid():
+        try:
+            import hid
+        except ImportError:
+            reexec_in_venv()
+            sys.exit(
+                "error: the hidapi Python module is missing for "
+                f"{sys.executable}.\n"
+                "  Run once:  voyager-layer --setup"
+            )
+        if not hasattr(hid, "enumerate") or not hasattr(hid, "device"):
+            sys.exit(
+                "error: wrong 'hid' module installed (need 'hidapi', not 'hid').\n"
+                "  pip3 uninstall hid && pip3 install hidapi"
+            )
+        return hid
+
+    @classmethod
+    def find(cls):
+        for d in cls._hid().enumerate(ZSA_VENDOR_ID, 0):
+            if d.get("usage_page") == RAW_USAGE_PAGE:
+                return d["path"]
+        raise NotFound
+
+    def __init__(self, path):
+        self.path = path.decode() if isinstance(path, bytes) else path
+        self.dev = self._hid().device()
+        self.dev.open_path(path)
+
+    def write(self, report):
+        self.dev.write([0] + list(report))
+
+    def read(self, timeout):
+        data = self.dev.read(64, max(1, int(timeout * 1000)))
+        return bytes(data) if data else None
+
+    def close(self):
+        self.dev.close()
+
+
+VENV = os.path.join(
+    os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")),
+    "voyager-layer", "venv",
+)
+VENV_PY = os.path.join(VENV, "bin", "python3")
+
+
+def reexec_in_venv():
+    """If our private venv exists and we're not already in it, restart there."""
+    if os.environ.get("VOYAGER_REEXEC") or not os.path.exists(VENV_PY):
+        return
+    os.environ["VOYAGER_REEXEC"] = "1"
+    os.execv(VENV_PY, [VENV_PY, os.path.abspath(__file__)] + sys.argv[1:])
+
+
+def setup_venv():
+    """Create the private venv and install hidapi into it."""
+    import venv
+    print(f"creating {VENV}")
+    venv.EnvBuilder(with_pip=True, clear=True).create(VENV)
+    pip = [VENV_PY, "-m", "pip", "install", "--quiet", "--upgrade"]
+    subprocess.run(pip + ["pip"], check=True)
+    r = subprocess.run(pip + ["hidapi"])
+    if r.returncode != 0:
+        sys.exit("pip failed. If it's a build error, run `brew install hidapi` and retry.")
+    subprocess.run([VENV_PY, "-c", "import hid; hid.enumerate"], check=True)
+    print("done — hidapi is installed; voyager-layer will use it automatically.")
+
+
+def pick_transport():
+    choice = os.environ.get("VOYAGER_BACKEND")
+    if choice == "hidraw" or (choice is None and sys.platform.startswith("linux")):
+        return HidrawTransport
+    return HidapiTransport
+
+
+# ---- protocol --------------------------------------------------------------
+def send(t, payload):
+    t.write(bytes(payload) + bytes(EPSIZE - len(payload)))
+
+
+def read_event(t, wanted, timeout=1.0):
+    """Read reports until one starts with `wanted`; skip key events etc."""
+    deadline = time.monotonic() + timeout
+    while (left := deadline - time.monotonic()) > 0:
+        data = t.read(left)
+        if data is None:
+            return None
+        if data and data[0] == wanted:
+            return data
+    return None
+
+
+def query_layer(t):
+    """(Re-)pair and ask for the active layer.
+
+    Pairing always answers with PAIRING_SUCCESS followed by a LAYER event that
+    reflects the live state (highest of layer_state | default_layer_state).
+    We use this instead of trusting the event sent after SET_LAYER, because
+    firmware that folds base layers into the default layer may not send one.
+    Returns (paired_ok, layer_or_None).
+    """
+    send(t, [CMD_PAIRING_INIT])
+    if not read_event(t, EVT_PAIRING_SUCCESS):
+        return False, None
+    ev = read_event(t, EVT_LAYER, timeout=0.5)
+    return True, (ev[1] if ev else None)
+
+
+def switch(t, target):
+    """Send SET_LAYER and return the layer the keyboard ends up on.
+
+    Custom firmware answers a base-layer switch with a LAYER event and then
+    clears the pairing flag. Stock firmware sends a LAYER event only if the
+    layer actually changed. If the event is missing or doesn't match, ask the
+    keyboard directly, and repeat the (idempotent) switch so custom firmware
+    goes quiet again after that re-pairing.
+    """
+    now = None
+    for _ in range(2):
+        send(t, [CMD_SET_LAYER, 1, target])  # 1 = on -> layer_move(target)
+        ev = read_event(t, EVT_LAYER, timeout=0.5)
+        if ev and ev[1] == target:
+            return target
+        _, now = query_layer(t)
+        if now == target:
+            quiet(t, target)
+            return target
+    return now
+
+
+def quiet(t, base):
+    """Re-select the active base layer. No visible change: base layers never
+    sit in layer_state, so nothing else gets switched off. On custom firmware
+    this clears the pairing flag; on stock firmware it's a harmless no-op."""
+    send(t, [CMD_SET_LAYER, 1, base])
+    read_event(t, EVT_LAYER, timeout=0.3)
+
+
+EVENT_NAMES = {0x05: "LAYER", 0x06: "KEYDOWN", 0x07: "KEYUP", 0x04: "PAIRED",
+               0x0B: "STATUS_LED_CONTROL", 0xFF: "ERROR"}
+
+
+def dump_events(t, seconds):
+    print(f"listening for {seconds:g}s - type and change layers now", flush=True)
+    deadline = time.monotonic() + seconds
+    while (left := deadline - time.monotonic()) > 0:
+        data = t.read(min(left, 0.5))
+        if not data:
+            continue
+        name = EVENT_NAMES.get(data[0], f"0x{data[0]:02x}")
+        if data[0] == 0x05:
+            detail = f"layer {data[1]}"
+        elif data[0] in (0x06, 0x07):
+            detail = f"col {data[1]} row {data[2]}"
+        else:
+            detail = " ".join(f"{b:02x}" for b in data[1:4])
+        print(f"{time.monotonic() - (deadline - seconds):6.2f}s  {name:8} {detail}", flush=True)
+
+
+def connect(wait):
+    """Open the device and pair. Returns (transport, current_layer)."""
+    Transport = pick_transport()
+    deadline = time.monotonic() + wait
+    last_error = "keyboard not found (is it plugged in? flashed with Oryx firmware?)"
+    while True:
+        try:
+            t = Transport(Transport.find())
+        except NotFound:
+            pass
+        except OSError as e:
+            last_error = f"could not open keyboard ({Transport.name}): {e}"
+        else:
+            try:
+                ok, layer = query_layer(t)
+                if ok:
+                    return t, layer
+                last_error = f"{t.path} did not answer the Oryx pairing request"
+            except OSError as e:
+                last_error = f"I/O error on {t.path}: {e}"
+            t.close()
+        if time.monotonic() >= deadline:
+            sys.exit(f"error: {last_error}")
+        time.sleep(0.3)
+
+
+def watch_leds(quiet_layers):
+    """Own the status LEDs: dark on the base layers, binary layer number otherwise.
+
+    For STOCK firmware only. The custom firmware already keeps the LEDs dark
+    on both bases, and it clears the pairing flag on every base switch, which
+    would stop this watcher from receiving layer events.
+
+    Runs until killed. Survives unplug/replug and sleep by reconnecting.
+    On exit, hands the LEDs back to the firmware.
+    """
+    t = None
+
+    def release(*_):
+        if t is not None:
+            try:
+                send(t, [CMD_STATUS_LED_CONTROL, 0])  # firmware takes over again
+                t.close()
+            except OSError:
+                pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, release)
+    signal.signal(signal.SIGHUP, release)
+
+    try:
+        while True:
+            t, current = connect(float("inf"))
+            print(f"connected ({t.path}), keeping LEDs dark on layers "
+                  f"{sorted(quiet_layers)}", flush=True)
+            shown = None
+
+            def apply(layer):
+                nonlocal shown
+                bits = 0 if layer is None or layer in quiet_layers else layer & 0x0F
+                if bits == shown:
+                    return
+                for i in range(4):
+                    send(t, [CMD_SET_STATUS_LED, i, (bits >> i) & 1])
+                shown = bits
+
+            try:
+                apply(current)
+                while True:
+                    data = t.read(1.0)
+                    if data and data[0] == EVT_LAYER:
+                        apply(data[1])
+            except OSError as e:
+                print(f"lost keyboard ({e}); waiting for it to come back", flush=True)
+                try:
+                    t.close()
+                except OSError:
+                    pass
+                t = None
+                time.sleep(1)
+    except KeyboardInterrupt:
+        release()
+
+
+def notify(enabled, msg):
+    if not enabled:
+        return
+    if shutil.which("notify-send"):
+        subprocess.run(["notify-send", "-t", "1500", "Voyager", msg], check=False)
+    elif shutil.which("osascript"):
+        subprocess.run(
+            ["osascript", "-e", f'display notification "{msg}" with title "Voyager"'],
+            check=False,
+        )
+
+
+def load_layers():
+    env = os.environ.get("VOYAGER_LAYERS")
+    if not env:
+        return dict(DEFAULT_LAYERS)
+    layers = {}
+    for pair in env.split(","):
+        name, _, idx = pair.partition("=")
+        layers[name.strip()] = int(idx)
+    return layers
+
+
+def main():
+    if "--setup" in sys.argv[1:]:
+        setup_venv()
+        return
+
+    layers = load_layers()
+    names = {v: k for k, v in layers.items()}
+
+    ap = argparse.ArgumentParser(description="Switch ZSA keyboard base layer without Keymapp")
+    ap.add_argument("target", help=f"{' | '.join(layers)} | toggle | status | leds | events | <layer index>")
+    ap.add_argument("seconds", nargs="?", type=float, default=10.0, help="for `events`: how long to listen")
+    ap.add_argument("--wait", type=float, default=0.0, help="seconds to wait for the keyboard")
+    ap.add_argument("--notify", action="store_true", help="show a desktop notification")
+    args = ap.parse_args()
+
+    def label(n):
+        return f"{names.get(n, 'layer')} ({n})" if n is not None else "unknown"
+
+    if args.target == "leds":
+        watch_leds(set(layers.values()))
+        return
+
+    if args.target not in layers and args.target not in ("toggle", "status", "events") \
+            and not args.target.isdigit():
+        ap.error(f"unknown target '{args.target}'")
+
+    t, current = connect(args.wait)
+    try:
+        bases = set(layers.values())
+
+        if args.target == "status":
+            print(label(current))
+            if current in bases:
+                quiet(t, current)
+            return
+
+        if args.target == "events":
+            dump_events(t, args.seconds)
+            _, now = query_layer(t)
+            if now in bases:
+                quiet(t, now)
+            return
+
+        if args.target == "toggle":
+            a, b = layers["omarchy"], layers["mac"]
+            target = b if current == a else a
+        elif args.target in layers:
+            target = layers[args.target]
+        else:
+            target = int(args.target)
+
+        was = current
+        now = switch(t, target)
+        if now != target:
+            notify(args.notify, f"Switch failed: now on {label(now)}")
+            sys.exit(f"error: asked for {label(target)}, keyboard reports {label(now)}")
+        msg = f"already on {label(now)}" if was == target else f"switched to {label(now)}"
+        print(msg)
+        notify(args.notify, msg[0].upper() + msg[1:])
+    finally:
+        t.close()
+
+
+if __name__ == "__main__":
+    main()
