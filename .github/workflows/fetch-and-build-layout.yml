@@ -86,6 +86,15 @@ jobs:
           git commit -m "✨(qmk): Update firmware" || echo "No QMK change"
           git push
 
+      # PLAN.md §11: generated files are never edited in git. Everything above
+      # has already been committed and pushed, so the edits these two steps make
+      # stay in the runner's working tree and out of the repo.
+      - name: Verify layout assumptions
+        run: ./tools/verify_layout.sh ${{ github.event.inputs.layout_id }}
+
+      - name: Apply customizations
+        run: ./tools/apply_customizations.sh ${{ github.event.inputs.layout_id }}
+
       - name: Build qmk docker image
         run: docker build -t qmk .
 

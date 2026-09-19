@@ -1,7 +1,10 @@
 """Tests for voyager-layer against the firmware model. Run: python3 -m unittest -v"""
+import atexit
 import contextlib
 import io
 import os
+import shutil
+import tempfile
 import runpy
 import sys
 import time
@@ -12,6 +15,10 @@ SCRIPT = os.environ.get("VOYAGER_LAYER", os.path.join(HERE, "..", "voyager-layer
 sys.path.insert(0, HERE)
 os.environ["VOYAGER_BACKEND"] = "hidapi"
 os.environ.pop("VOYAGER_LAYERS", None)
+# keep the developer's real ~/.config/voyager-layer/config out of the tests
+CONFIG_HOME = tempfile.mkdtemp(prefix="voyager-test-xdg-")
+os.environ["XDG_CONFIG_HOME"] = CONFIG_HOME
+atexit.register(shutil.rmtree, CONFIG_HOME, True)
 
 import fw_model  # noqa: E402
 
@@ -193,6 +200,66 @@ class Errors(unittest.TestCase):
     def test_bad_target(self):
         code, out = run("nope")
         self.assertNotEqual(code, 0)
+
+
+class LayerConfig(unittest.TestCase):
+    """tools/layers.conf is the single source of truth (PLAN.md §11.1)."""
+
+    def test_defaults_match_layers_conf(self):
+        # drift here means the firmware and the host scripts disagree
+        import runpy as _runpy
+        mod = _runpy.run_path(SCRIPT, run_name="not_main")
+        self.assertEqual(mod["DEFAULT_LAYERS"], fw_model.LAYERS)
+
+    def test_config_file_overrides_defaults(self):
+        path = os.path.join(CONFIG_HOME, "voyager-layer", "config")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write("# comment\nmac = 0\nomarchy = 5\n\n")
+        try:
+            fw_model.BOARD = fw_model.FW("stock")
+            self.assertEqual(run("omarchy"), (0, "switched to omarchy (5)"))
+        finally:
+            os.remove(path)
+
+    def test_env_beats_config_file(self):
+        path = os.path.join(CONFIG_HOME, "voyager-layer", "config")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write("mac=0\nomarchy=5\n")
+        os.environ["VOYAGER_LAYERS"] = "mac=0,omarchy=4"
+        try:
+            fw_model.BOARD = fw_model.FW("stock")
+            self.assertEqual(run("omarchy"), (0, "switched to omarchy (4)"))
+        finally:
+            os.remove(path)
+            os.environ.pop("VOYAGER_LAYERS", None)
+
+
+class EventOrdering(Base):
+    """The oryx module emits a stale LAYER event before our fold hook runs."""
+    mode = "custom"
+
+    def test_last_event_names_the_new_base(self):
+        self.board.default = 1 << fw_model.LAYERS["omarchy"]
+        self.board.rx(0x01, [0] * 31)          # host pairs
+        self.board.out.clear()
+        self.board.rx(0x04, [1, fw_model.LAYERS["mac"]])   # SET_LAYER mac
+        layers = [e[1] for e in self.board.out if e[0] == 0x05]
+        self.assertEqual(layers[-1], fw_model.LAYERS["mac"],
+                         f"last LAYER event must name the new base, got {layers}")
+        self.assertFalse(self.board.paired)
+
+    def test_stale_event_costs_no_extra_pairing(self):
+        # The base moved while nothing was paired -- a TO() key, or firmware OS
+        # detection -- so the module's current_layer cache still says 0 and its
+        # dedup will not swallow the stale event. switch() must scan past it
+        # instead of falling into the re-pair path, which costs a PAIRING_INIT.
+        self.board.layer_move(fw_model.LAYERS["omarchy"])
+        self.assertEqual(self.board.current_layer, 0)
+        self.assertEqual(self.board.pairings, 0)
+        self.assertEqual(run("mac"), (0, "switched to mac (0)"))
+        self.assertEqual(self.board.pairings, 1, "switch() re-paired instead of scanning")
 
 
 if __name__ == "__main__":

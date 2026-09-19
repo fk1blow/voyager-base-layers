@@ -12,7 +12,23 @@ mode:
 import collections
 import os
 
-BASES = (0, 2)
+def _load_bases():
+    """Base layer indices from tools/layers.conf -- the single source of truth
+    the firmware defines and the host scripts also read (PLAN.md §11.1)."""
+    conf = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        os.pardir, os.pardir, "tools", "layers.conf")
+    bases = {}
+    with open(conf) as f:
+        for line in f:
+            line = line.split("#", 1)[0].strip()
+            if "=" in line:
+                name, _, idx = line.partition("=")
+                bases[name.strip()] = int(idx.strip())
+    return bases
+
+
+LAYERS = _load_bases()
+BASES = tuple(sorted(LAYERS.values()))
 
 
 def hi(x):
@@ -26,6 +42,7 @@ class FW:
         self.default = 1 << default_base
         self.current_layer = 0      # oryx module's cache
         self.paired = False
+        self.pairings = 0        # PAIRING_INIT count, to spot extra round trips
         self.out = collections.deque()
         self.leds = 0
 
@@ -45,6 +62,7 @@ class FW:
 
     def rx(self, cmd, p):
         if cmd == 0x01:
+            self.pairings += 1
             self.paired = True
             self.send(0x04, 0xFE)
             self.oryx_layer_event()
@@ -63,14 +81,18 @@ class FW:
             return state
         mask = sum(1 << b for b in BASES)
         req = state & mask
-        if req:
-            base = hi(req)
-            if hi(self.default) != base:
-                self.default_layer_set(1 << base)
-            state &= ~mask
-            if self.mode == "custom" and self.paired:
-                self.oryx_layer_event()
-                self.paired = False
+        if not req:
+            return state
+        base = hi(req)
+        state &= ~mask
+        if hi(self.default) != base:
+            self.default_layer_set(1 << base)
+        # The module's own hook already fired, before this one, while `default`
+        # still held the old base -- so it reported the base we are leaving.
+        # Ours is the LAST layer event of a switch, not the only one.
+        if self.mode == "custom" and self.paired:
+            self.oryx_layer_event()
+            self.paired = False
         return state
 
     def layer_state_set(self, state):

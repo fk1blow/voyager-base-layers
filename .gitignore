@@ -4,3 +4,6 @@
 # Python bytecode from host/tests
 __pycache__/
 *.py[cod]
+
+# Generated at build time by tools/apply_customizations.sh (PLAN.md §11.2)
+base_layers_config.h

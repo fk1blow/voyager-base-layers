@@ -75,6 +75,11 @@ host/
     tests/fw_model.py                          EXISTING: model of firmware + oryx module
     tests/hid.py                               EXISTING: fake hidapi backed by the model
     tests/test_voyager_layer.py                EXISTING: 20 unittest cases, all passing
+tools/
+    layers.conf                                NEW: single source of truth for layer indices (§11.1)
+    apply_customizations.sh                    NEW: applies all edits to generated files at build time (§11.2)
+    verify_layout.sh                           NEW: assumption checks + layout diff vs snapshot (§11.3)
+    layout.snapshot.json                       NEW: last reviewed layout summary (§11.3)
 README.md                                      REWRITE (§8)
 docs/firmware.md  docs/omarchy.md  docs/macos.md  docs/protocol.md  docs/privacy.md  docs/troubleshooting.md
 ```
@@ -217,15 +222,22 @@ include the module's `oryx.h`.
 
 ### 6.3 Wiring
 
+**Generated files are read-only in git.** `<LAYOUT_ID>/` holds exactly what Oryx produced, so the
+template's `git merge -Xignore-all-space oryx` never conflicts. Every edit below is applied by
+`tools/apply_customizations.sh` during the build (§11.2), not committed. The only files we commit
+inside `<LAYOUT_ID>/` are `base_layers.c` and `base_layers.h`.
+
+The edits the script makes:
+
 - **`rules.mk`:** append `SRC += base_layers.c`, plus a commented `# OS_DETECTION_ENABLE = yes`.
-- **`keymap.c`:** call the fold hook.
+- **`keymap.c` (fold hook):**
   - If Oryx did **not** define `layer_state_set_user`, append:
     ```c
     #include "base_layers.h"
     layer_state_t layer_state_set_user(layer_state_t state) { return base_layers_fold(state); }
     ```
-  - If it **did**, add `state = base_layers_fold(state);` as the first line of the existing function, and
-    flag it in the docs as a spot to re-check after Oryx updates.
+  - If it **did**, insert `state = base_layers_fold(state);` as the first line of the existing function.
+    The script must handle both cases and fail loudly if neither anchor is found.
 - **`config.h`:** append a clearly marked, commented-out options block:
   ```c
   // --- base layer options ---
@@ -233,7 +245,11 @@ include the module's `oryx.h`.
   // #define OS_DETECTION_KEYBOARD_RESET   // re-detect when a KVM/switch changes hosts without power loss
   // #define BASE_LAYERS_KEEP_PAIRING      // don't clear the pairing flag on base switches
   ```
-- **Optional keys:** `TO(0)` / `TO(1)` keys set in Oryx now act as "switch base layer" keys. They also
+- **`keymap.c` (per-key RGB):** Oryx picks the RGB row with `switch (biton32(layer_state))`, which can't
+  see the default layer, so after the fold both bases would use `ledmap[BASE_MAC]`. Replace it with
+  `switch (get_highest_layer(layer_state | default_layer_state))`. Matters because the per-key amber
+  indicator is the only remaining visual cue for which base is active (the status LEDs are dark on both).
+- **Optional keys:** `TO()` keys for the base layers set in Oryx now act as "switch base layer" keys. They also
   clear the pairing flag (see §2). No `DF()` keys are needed.
 
 ### 6.4 Acceptance
@@ -382,3 +398,75 @@ Tasks:
 - Is my hub a plain hub (always on one computer) or a switch between computers?
   Does it cut power to the keyboard when switching?
 - Repo name and visibility.
+
+## 11. Updating the layout from Oryx (the important part)
+
+I will keep editing the layout in Oryx (new keys on `oma/sys`, moved keys, new layers). That must not
+mean re-doing the custom work each time. Three rules make that true:
+
+**Rule 1 — generated files are never edited in git.** `<LAYOUT_ID>/` is whatever Oryx produced.
+**Rule 2 — customizations are applied at build time**, idempotently, by a script that fails loudly.
+**Rule 3 — every refresh shows me a diff of what changed in the layout**, so a renumbered layer can't
+slip through silently.
+
+### 11.1 `tools/layers.conf` — one source of truth for layer indices
+
+```sh
+# name=index, as shown in Oryx (0-based)
+mac=0
+omarchy=2
+```
+
+Consumed by:
+- `apply_customizations.sh` → generates the `#define BASE_MAC` / `#define BASE_OMARCHY` values
+  (write them into a generated `base_layers_config.h`; keep `base_layers.h` free of hard-coded numbers),
+- `install.sh` → writes `~/.config/voyager-layer/config` (or sets `VOYAGER_LAYERS`) for the host scripts,
+- `host/tests` → the model and tests read the same values.
+
+If I reorder layers in Oryx, editing this file is the only change needed.
+
+### 11.2 `tools/apply_customizations.sh`
+
+Runs in the workflow after the layout is fetched/merged and before the Docker build. Also runnable
+locally. Requirements:
+- **Idempotent:** a second run changes nothing (guard each edit with a marker comment).
+- **Anchored:** every edit looks for a specific pattern; if an anchor is missing or already differs
+  (Oryx changed its output), the script **exits non-zero with a clear message** rather than guessing.
+  A failed build is the wanted behaviour; a silently skipped edit is not.
+- **Edits:** the `rules.mk`, `config.h`, fold-hook and RGB-row changes from §6.3, plus
+  `base_layers_config.h` from `layers.conf`.
+- Prints a summary of what it changed.
+
+### 11.3 `tools/verify_layout.sh` + `layout.snapshot.json`
+
+Runs right after the fetch, before `apply_customizations.sh`. It builds a small summary from the
+generated `keymap.json`: layer count, and per layer the number of non-transparent keys plus the
+keycodes of a few anchor positions (the thumbs). Then:
+- **Hard failures** (exit non-zero): fewer layers than `layers.conf` needs; a base index out of range;
+  both base indices equal.
+- **Soft report:** diff the summary against `tools/layout.snapshot.json` and print what changed, e.g.
+  `layer 3 (oma/sys): 12 -> 13 non-transparent keys`, `layer count 4 -> 5`.
+- `tools/verify_layout.sh --update` rewrites the snapshot. I commit the new snapshot together with the
+  refreshed layout, which makes each layout change visible in the repo's history.
+
+### 11.4 The update flow (put this at the top of `docs/firmware.md`)
+
+1. Edit the layout in Oryx, then press **Compile** there.
+2. Run the build workflow (the ZSA Chrome extension can start it from inside Oryx).
+   It fetches into `oryx`, merges into `main`, verifies, applies customizations, and builds.
+3. If the workflow fails, it says which anchor broke. Fix `apply_customizations.sh` (usually a one-line
+   pattern change) and re-run. This is the only maintenance this design has.
+4. If a layer was renumbered, update `tools/layers.conf` and re-run. Update the host config too
+   (re-run `install.sh` or edit `~/.config/voyager-layer/config`).
+5. Review the verify step's diff in the workflow log, then commit the refreshed layout and snapshot.
+6. Download the `.bin` artifact and flash with Keymapp.
+7. Re-run the quick checks: `voyager-layer status`, `voyager-test`, and confirm the LEDs are dark on
+   both bases and that the per-key amber indicator still follows the base.
+
+### 11.5 Also do
+
+- A `tools/check.sh` for local use: host tests + `verify_layout.sh` + `apply_customizations.sh --dry-run`
+  + shellcheck. The `host-tests` workflow calls it too.
+- Tag each flashed build (`git tag fw-YYYY-MM-DD`) so I can rebuild a known-good firmware after a bad
+  Oryx edit.
+- Keep the previous `.bin` artifact around; flashing back is the fastest rollback.

@@ -1,0 +1,73 @@
+{
+  "layout_dir": "7m5PJ",
+  "revision": "7m5PJ/m57ajN",
+  "layer_count": 6,
+  "layers": [
+    {
+      "index": 0,
+      "keys": 52,
+      "non_transparent": 52,
+      "thumbs": [
+        "KC_LEFT_GUI",
+        "MEH_T(KC_SPACE)",
+        "MO(4)",
+        "LT(1, KC_SPACE)"
+      ]
+    },
+    {
+      "index": 1,
+      "keys": 52,
+      "non_transparent": 24,
+      "thumbs": [
+        "KC_TRANSPARENT",
+        "LCTL(KC_SPACE)",
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT"
+      ]
+    },
+    {
+      "index": 2,
+      "keys": 52,
+      "non_transparent": 1,
+      "thumbs": [
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT",
+        "LT(3, KC_SPACE)"
+      ]
+    },
+    {
+      "index": 3,
+      "keys": 52,
+      "non_transparent": 26,
+      "thumbs": [
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT"
+      ]
+    },
+    {
+      "index": 4,
+      "keys": 52,
+      "non_transparent": 24,
+      "thumbs": [
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT"
+      ]
+    },
+    {
+      "index": 5,
+      "keys": 52,
+      "non_transparent": 4,
+      "thumbs": [
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT"
+      ]
+    }
+  ]
+}

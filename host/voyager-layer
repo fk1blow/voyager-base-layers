@@ -28,8 +28,10 @@ Options:
   --wait SECS    keep retrying until the keyboard shows up (for hotplug/login)
   --notify       show a desktop notification
 
-Layer indices are 0-based, in the order shown in Oryx. Override without
-editing the file via:  VOYAGER_LAYERS="mac=0,omarchy=2"
+Layer indices are 0-based, in the order shown in Oryx. They come from, in order:
+  VOYAGER_LAYERS="mac=0,omarchy=2"   environment variable
+  ~/.config/voyager-layer/config     `name=index` lines, written by install.sh
+  the built-in defaults below
 """
 import argparse
 import glob
@@ -43,6 +45,10 @@ import time
 
 # ---- config ----------------------------------------------------------------
 DEFAULT_LAYERS = {"mac": 0, "omarchy": 2}
+CONFIG_PATH = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")),
+    "voyager-layer", "config",
+)
 
 # ---- Oryx protocol (from zsa/qmk_modules oryx/oryx.h) -------------------------
 ZSA_VENDOR_ID = 0x3297
@@ -208,6 +214,27 @@ def read_event(t, wanted, timeout=1.0):
     return None
 
 
+def read_layer_until(t, target, timeout=0.6):
+    """Read LAYER events until one reports `target`; return the last one seen.
+
+    A base switch produces more than one LAYER event. The oryx module's own
+    layer_state_set hook runs before our fold hook (modules -> _kb -> _user) and
+    computes its value while default_layer_state still holds the OLD base, so
+    the first event after a switch names the layer we are leaving. Our hook
+    sends the accurate one afterwards, so the target may be second.
+    """
+    deadline = time.monotonic() + timeout
+    seen = None
+    while (left := deadline - time.monotonic()) > 0:
+        ev = read_event(t, EVT_LAYER, timeout=left)
+        if ev is None:
+            break
+        seen = ev[1]
+        if seen == target:
+            return seen
+    return seen
+
+
 def query_layer(t):
     """(Re-)pair and ask for the active layer.
 
@@ -227,17 +254,17 @@ def query_layer(t):
 def switch(t, target):
     """Send SET_LAYER and return the layer the keyboard ends up on.
 
-    Custom firmware answers a base-layer switch with a LAYER event and then
-    clears the pairing flag. Stock firmware sends a LAYER event only if the
-    layer actually changed. If the event is missing or doesn't match, ask the
-    keyboard directly, and repeat the (idempotent) switch so custom firmware
-    goes quiet again after that re-pairing.
+    Custom firmware answers a base-layer switch with a LAYER event naming the
+    new base, and then clears the pairing flag -- but the oryx module emits a
+    stale event first (see read_layer_until). Stock firmware sends a LAYER event
+    only if the layer actually changed. If no event matches, ask the keyboard
+    directly, and repeat the (idempotent) switch so custom firmware goes quiet
+    again after that re-pairing.
     """
     now = None
     for _ in range(2):
         send(t, [CMD_SET_LAYER, 1, target])  # 1 = on -> layer_move(target)
-        ev = read_event(t, EVT_LAYER, timeout=0.5)
-        if ev and ev[1] == target:
+        if read_layer_until(t, target) == target:
             return target
         _, now = query_layer(t)
         if now == target:
@@ -371,15 +398,35 @@ def notify(enabled, msg):
         )
 
 
-def load_layers():
-    env = os.environ.get("VOYAGER_LAYERS")
-    if not env:
-        return dict(DEFAULT_LAYERS)
+def _parse_layers(text, sep):
     layers = {}
-    for pair in env.split(","):
-        name, _, idx = pair.partition("=")
-        layers[name.strip()] = int(idx)
+    for line in text.split(sep):
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        name, _, idx = line.partition("=")
+        layers[name.strip()] = int(idx.strip())
     return layers
+
+
+def load_layers():
+    """VOYAGER_LAYERS > ~/.config/voyager-layer/config > built-in defaults.
+
+    The config file uses the same `name=index` lines as tools/layers.conf in the
+    repo, so install.sh can copy that file into place and the firmware, the host
+    scripts and the tests all agree on one set of indices.
+    """
+    env = os.environ.get("VOYAGER_LAYERS")
+    if env:
+        return _parse_layers(env, ",")
+    try:
+        with open(CONFIG_PATH) as f:
+            layers = _parse_layers(f.read(), "\n")
+        if layers:
+            return layers
+    except OSError:
+        pass
+    return dict(DEFAULT_LAYERS)
 
 
 def main():
