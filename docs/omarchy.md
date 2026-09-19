@@ -21,6 +21,12 @@ both Hyprland edits detect a line that is already there, however it got added.
 Note it replaces any dev symlink in `~/.local/bin` with a real copy, so an installed tool does
 not break if the repo moves. If you later edit `host/voyager-layer`, re-run `install.sh`.
 
+`voyager-layer` reads its layer names and indices from that written config, unless
+`VOYAGER_LAYERS="mac=0,omarchy=2"` is set in the environment — which always wins over the
+file — and falls back to its own built-in defaults if neither is present. `VOYAGER_BACKEND`
+is unrelated to layer config: it forces the raw-HID transport (`hidraw` on Linux, `hidapi` on
+macOS) instead of auto-detecting one, which you'd only need for testing.
+
 ## The pieces
 
 ### udev — switch on plug-in
@@ -76,6 +82,9 @@ the wrong one. Tap this before handing the dock over.
 o.bind("SUPER + CTRL + V", "Toggle Voyager base layer", os.getenv("HOME") .. "/.local/bin/voyager-layer toggle --notify")
 ```
 
+`--notify` shows a desktop notification with the result; drop it if you'd rather rely on the
+per-key amber indicator.
+
 Check the combo is free first — `omarchy menu keybindings --print`. `SUPER CTRL + K` is taken
 by "Herdr keybindings" on a stock Omarchy 4.x install. `install.sh --keybind` appends both
 lines, marked, and refuses if the combo is already bound.
@@ -86,10 +95,15 @@ lines, marked, and refuses if the combo is already bound.
 voyager-layer status                # omarchy (2)
 voyager-test                        # guided round trip: omarchy -> mac -> omarchy
 voyager-layer events 10             # debug dump; type during it
+voyager-layer 4                     # jump to any layer by index, base or not
 ```
 
 After a replug, `status` should say `omarchy (2)` within about a second with no manual step.
 After a reboot and login, the same, via autostart.
+
+A bare number switches to that layer whatever it is — handy for testing a non-base layer, and
+the reason the firmware only folds the two configured base indices and leaves everything else
+alone. Switching to a non-base layer does **not** make the board go quiet.
 
 `voyager-layer events` pairs the board, which is what makes it report — so it cannot be used
 to observe the board being quiet. See [protocol.md](protocol.md).

@@ -7,14 +7,19 @@
 ```
 
 On macOS this copies the scripts to `~/.local/bin` and runs `voyager-layer --setup`, which
-creates a private venv at `~/.local/share/voyager-layer/venv` and installs `hidapi` into it.
-The script re-launches itself inside that venv automatically whenever `hidapi` is not
-importable, so nothing needs to be activated.
+creates the private venv the `hidapi` backend needs, at `~/.local/share/voyager-layer/venv`,
+and installs `hidapi` into it. The script re-launches itself inside that venv automatically
+whenever `hidapi` is not importable, so nothing needs to be activated.
 
 It must be **`hidapi`**, not `hid` — two different PyPI packages with a clashing import name.
 If the wrong one is installed, `voyager-layer` says so and tells you how to fix it.
 
 If `pip` fails to build it: `brew install hidapi`, then re-run `voyager-layer --setup`.
+
+`install.sh --dry-run` and `--uninstall` work the same as on Linux — see
+[omarchy.md](omarchy.md#install). `VOYAGER_BACKEND=hidraw|hidapi` forces a transport
+instead of auto-detecting one; the only reason to set it here is to test the Linux path on a
+Mac or vice versa.
 
 ## Automatic switching
 

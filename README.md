@@ -1,7 +1,10 @@
 # voyager-base-layers
 
-Switch a [ZSA Voyager](https://www.zsa.io/voyager) between two base layers — one for macOS,
-one for [Omarchy](https://omarchy.org/) — and have each machine pick the right one by itself.
+One [ZSA Voyager](https://www.zsa.io/voyager) keyboard, shared between a Mac and an
+[Omarchy](https://omarchy.org/) (Arch + Hyprland) box, each of which wants different keys in
+different places — but a keyboard only has one active layout at a time. This project makes
+each machine select the right base layout for itself, the moment the board is plugged in,
+without any background software watching for it.
 
 Two halves, usable separately:
 
@@ -18,96 +21,54 @@ voyager-layer toggle      # switched to mac (0)
 
 ## Scripts
 
-Everything lives in `host/`. Install once, then the only command you need day to day is
-`voyager-layer`.
-
-### `install.sh` — one-time setup
-
-```
-./host/install.sh [--autostart] [--keybind] [--uninstall] [--dry-run]
-```
-
-Copies `voyager-layer` and `voyager-test` to `~/.local/bin`, and writes
-`~/.config/voyager-layer/config` from [`tools/layers.conf`](tools/layers.conf) so the scripts
-and the firmware always agree on layer numbers.
-
-- On **Linux** it also installs the udev rule and the systemd user unit that switch the
-  keyboard to the Omarchy base on plug-in, and prints the Hyprland autostart line rather than
-  editing your config for you. `--autostart` appends that line instead of just printing it;
-  `--keybind` (implies `--autostart`) also adds a manual toggle keybind. See
-  [docs/omarchy.md](docs/omarchy.md) for what each piece does and why boot needs the
-  autostart line in addition to udev.
-- On **macOS** it also runs `voyager-layer --setup` (below). See [docs/macos.md](docs/macos.md)
-  for what to do if a KVM or dock switches hosts without cutting power.
-- `--dry-run` prints what it would do without doing it. `--uninstall` removes what it
-  installed, but leaves `~/.config/voyager-layer` and anything you added to your Hyprland
-  config alone. Re-running plain `install.sh` is always safe — it detects what is already in
-  place and changes nothing else.
-
-### `voyager-layer` — switch or query the base layer
+Everything lives in `host/`. Run `./host/install.sh` once — see
+[docs/omarchy.md](docs/omarchy.md) or [docs/macos.md](docs/macos.md) for exactly what it sets
+up on each OS and for its flags. Day to day, the only command you need is `voyager-layer`:
 
 ```
-voyager-layer omarchy        # jump to the Omarchy base layer
-voyager-layer mac            # jump to the Mac base layer
-voyager-layer toggle         # flip between the two
-voyager-layer status         # print the currently active layer
-voyager-layer 3              # jump to any layer by index
-voyager-layer events [SECS]  # debug: print what the keyboard sends (default 10s)
+voyager-layer omarchy      # jump to the Omarchy base layer
+voyager-layer mac          # jump to the Mac base layer
+voyager-layer toggle       # flip between the two
+voyager-layer status       # print the currently active layer
 ```
 
-Options:
-
-- `--wait SECS` — keep retrying until the keyboard shows up. Used by the udev unit and the
-  Hyprland autostart line to ride out the gap right after plug-in or login.
-- `--notify` — show a desktop notification with the result.
-- `--setup` — create the private venv the hidapi backend needs (see
-  [docs/macos.md](docs/macos.md)) and install `hidapi` into it. The script re-launches itself
-  in that venv automatically afterwards, so nothing needs activating by hand.
-
-The base layer names (`mac`, `omarchy`) and their indices come from, in order: the
-`VOYAGER_LAYERS` environment variable, `~/.config/voyager-layer/config` (written by
-`install.sh`), or the script's built-in defaults. `VOYAGER_BACKEND=hidraw|hidapi` forces a
-transport instead of auto-detecting one. On the custom firmware, switching to a base layer
-also leaves the keyboard quiet afterwards — see [below](#why-the-firmware-needs-a-hook).
-
-### `voyager-test` — manual verification harness
-
-```
-voyager-test              # full round trip: omarchy -> mac -> omarchy, with a summary
-voyager-test mac          # switch to the Mac layer, then ask you to verify
-voyager-test omarchy      # switch to the Omarchy layer, then ask you to verify
-voyager-test toggle       # press Enter to flip layers, q to quit
-```
-
-It drives `voyager-layer` for you, then asks you to type in an editor and confirm by hand
-whether the keyboard is behaving like the layer it just switched to — there is no way to
-check key output without a person at the keyboard.
+`voyager-test` is a manual harness: it drives those same switches and asks you to confirm by
+hand that the keyboard is behaving like the layer it just switched to.
 
 ## Updating the layout from Oryx
 
-You will keep editing the layout in Oryx. That should never mean redoing the firmware
-customization by hand — it is re-applied automatically on every build. The short version:
+The layout keeps changing — new keys, moved keys, a new layer — and Oryx is where that
+happens. The whole point of this repo's build setup is that those edits never require redoing
+the firmware customization by hand: the hook described below, plus a small LED fix, live
+outside the generated layout and get re-applied automatically every time, onto whatever the
+layout looks like now.
 
-1. Edit the layout in Oryx, then press **Compile** there.
-2. Run the **Fetch and build layout** workflow (`layout_id: 7m5PJ`, `layout_geometry: voyager`)
-   — the ZSA browser extension can start it from inside Oryx. It fetches the new layout,
-   merges it in, verifies it, re-applies the customizations, and builds.
-3. If it fails, the log names the anchor that broke — usually a one-line pattern fix in
-   `tools/apply_customizations.sh`, then re-run.
-4. **If you renumbered a base layer**, update [`tools/layers.conf`](tools/layers.conf) and
-   re-run the workflow, **and** re-run `host/install.sh` so the host scripts pick up the new
-   numbers. This is the one change that has to land on both the firmware and the host side —
-   skip it and you get `error: asked for mac (0), keyboard reports omarchy (2)`.
-5. Read the diff the workflow prints for the layout-verification step, then commit the
-   refreshed layout and, if the change was intentional, an updated snapshot
-   (`tools/verify_layout.sh --update`).
-6. Download the `.bin` artifact and flash it with Keymapp.
-7. Re-check: `voyager-layer status`, LEDs dark on both bases, and the per-key amber indicator
-   still following the base.
+So the routine is just: edit the layout in Oryx, press **Compile**, then run the **Fetch and
+build layout** workflow (`layout_id: 7m5PJ`, `layout_geometry: voyager`) — the ZSA browser
+extension can start it from inside Oryx. It fetches your new layout, merges it in, re-applies
+the customization, and builds a `.bin`.
 
-The full mechanics — why generated files are never hand-edited, what
-`apply_customizations.sh` actually changes, and what to do if it starts failing — are in
-[docs/firmware.md](docs/firmware.md).
+The one way this can need attention is if Oryx changes the shape of its generated code enough
+that the customization script no longer recognizes the spot it edits — it looks for exact
+patterns and refuses to guess rather than apply something wrong. If a build fails, the log
+names which pattern broke, and the fix is almost always a one-line change in
+`tools/apply_customizations.sh`.
+
+**The one manual step that is not optional: if you renumber a base layer in Oryx**, update
+[`tools/layers.conf`](tools/layers.conf) to match, and re-run `host/install.sh` so the host
+scripts pick up the new numbers before you flash. The layer numbers are the one thing
+deliberately duplicated between the firmware and the host script, and this is the one place
+they have to be kept in sync by hand — skip it and you get
+`error: asked for mac (0), keyboard reports omarchy (2)`, the two sides disagreeing over stale
+numbers rather than a real firmware bug.
+
+Before flashing, look at the diff the workflow prints for the layout and commit it, so every
+layout change is visible in the repo's history. Then download the `.bin` artifact, flash it
+with Keymapp, and confirm with `voyager-layer status` that you land on the base you expect and
+that the LEDs stay dark on both.
+
+The full mechanics — why generated files are never hand-edited, and exactly what
+`apply_customizations.sh` changes — are in [docs/firmware.md](docs/firmware.md).
 
 ## Why the firmware needs a hook
 
