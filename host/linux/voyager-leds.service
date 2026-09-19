@@ -1,0 +1,17 @@
+# OPTIONAL, and only useful on STOCK Oryx firmware.
+#
+# With the custom firmware from this repo the status LEDs are already dark on
+# both base layers, and the board clears its pairing flag on every base switch
+# -- so this watcher would stop receiving layer events after the first switch
+# and do nothing. host/install.sh does not install it unless you pass --leds.
+[Unit]
+Description=Keep the ZSA Voyager status LEDs dark on the base layers (stock firmware only)
+Documentation=https://github.com/fk1blow/voyager-base-layers
+
+[Service]
+ExecStart=%h/.local/bin/voyager-layer leds
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

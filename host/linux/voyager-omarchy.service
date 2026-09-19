@@ -1,0 +1,10 @@
+# systemd --user unit. Triggered by 70-zsa-voyager.rules when the board is
+# plugged in. At boot the user manager may not exist yet, which is why the
+# Hyprland autostart line in hyprland.lua covers the login case as well.
+[Unit]
+Description=Switch the ZSA Voyager to the Omarchy base layer
+Documentation=https://github.com/fk1blow/voyager-base-layers
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/voyager-layer omarchy --wait 5
