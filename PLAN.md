@@ -38,11 +38,16 @@ Two parts, usable separately or together, neither treated as second-class:
   flag is set, the firmware sends one LAYER event (a reliable reply for the script) and then clears
   the flag. After that the keyboard sends nothing over raw HID (no key events, no layer events) until
   something pairs again.
+  - **This is tidiness, not a security feature.** Stock Oryx keeps pushing key and layer reports at an
+    interface nobody is reading until the board loses power; going quiet just stops emitting USB traffic
+    that has no reader, and makes the switch reply deterministic. It is not protection: anything that can
+    open the raw interface runs as me and already has far easier ways to read my keystrokes.
+    See `docs/protocol.md` for what is actually reported and when.
   - Keymapp keeps full functionality: opening it pairs, and everything flows. The flag may stay set
     after Keymapp closes, until the next base switch or power loss. That is fine.
   - There is **no** timer and **no** key-event suppression hook. Both were considered and dropped.
-  - Known trade-off: pressing a `TO(0)`/`TO(1)` key also clears the flag, so Keymapp's live view stops
-    until Keymapp is reopened. Accepted. Don't add code to tell key presses and host commands apart.
+  - Known trade-off: pressing a `TO()` key for a base layer also clears the flag, so Keymapp's live view
+    stops until Keymapp is reopened. Accepted. Don't add code to tell key presses and host commands apart.
 - **Stock firmware keeps working with the scripts**, and just leaves the flag set (that's stock behaviour).
 - **The LED watcher (`voyager-layer leds`) is stock-firmware-only and optional.** It isn't installed by
   default. With the custom firmware it's pointless (LEDs are already dark) and would stop receiving
@@ -81,7 +86,7 @@ tools/
     verify_layout.sh                           NEW: assumption checks + layout diff vs snapshot (§11.3)
     layout.snapshot.json                       NEW: last reviewed layout summary (§11.3)
 README.md                                      REWRITE (§8)
-docs/firmware.md  docs/omarchy.md  docs/macos.md  docs/protocol.md  docs/privacy.md  docs/troubleshooting.md
+docs/firmware.md  docs/omarchy.md  docs/macos.md  docs/protocol.md  docs/troubleshooting.md
 ```
 
 ## 4. Background (verified in source, Sept 2026)
@@ -362,15 +367,19 @@ Tasks:
 - **`docs/omarchy.md`:** install, udev, systemd, autostart, optional keybind, `voyager-test`, `events`.
 - **`docs/macos.md`:** `--setup`, testing, optional LaunchAgent, quit Keymapp while testing, Input
   Monitoring note (probably not needed for this interface).
-- **`docs/protocol.md`:** §4 condensed, with source links.
-- **`docs/privacy.md`:** in plain words:
-  - what "paired" means,
-  - what stock firmware sends after Keymapp or the script runs, and who can read it (key positions, not characters),
-  - how the custom firmware goes quiet after every base switch,
-  - that a program that pairs on purpose can still read events (same as stock),
-  - the `TO()` + Keymapp trade-off,
-  - optional Linux hardening, documented only and not installed: root-only device access plus a system
-    service for the switch, triggered by udev and by the keybind via a narrowly scoped sudo/polkit rule.
+- **`docs/protocol.md`:** §4 condensed, with source links. Then a short, neutral
+  "what the board reports, and when" — facts, not warnings:
+  - the pairing flag starts **off** at power-up; nothing is reported until something
+    (Keymapp, `voyager-layer`) pairs on purpose,
+  - while paired, every key press/release and every layer change is pushed as a report; if no program
+    has the interface open, the OS discards them,
+  - stock firmware keeps the flag set until power loss; the custom firmware clears it on every base switch,
+  - reports carry key **positions** (col/row), not characters — but do not present that as protection:
+    the board's USB serial number *is* the Oryx layout id and revision (e.g. `7m5PJ/nlz66J`), a public
+    layout can be fetched anonymously, and layer changes are broadcast too, so positions decode easily,
+  - a program that pairs on purpose can read events; identical on stock and custom firmware,
+  - where Keymapp is installed, `/usr/lib/udev/rules.d/50-wally.rules` sets `MODE:="0666"` on every ZSA
+    device, so the raw interface is world-readable there — that, not `uaccess`, is what grants access.
 - **`docs/troubleshooting.md`:**
   - "keyboard not found" → the hidapi enumerate one-liner that lists usage pages,
   - permission denied → udev and replug,
