@@ -94,6 +94,35 @@ for m in re.finditer(r"\[(\d+)\]\s*=\s*LAYOUT\w*\(", src):
 if not layers:
     fail("no LAYOUT_*() blocks found in keymap.c -- Oryx output changed")
 
+# --- combos: two chords with the same keys (hard) ---------------------------
+# QMK matches a combo as an unordered SET of keys, so {3,4,1,2} and {1,2,3,4}
+# are the same chord. Oryx lists them in order and will happily let you define
+# both -- and has duplicated one on its own. Both then fire, the last one in
+# key_combos[] wins, and the other looks simply dead.
+combo_keys, combo_actions = {}, {}
+for m in re.finditer(r"const\s+uint16_t\s+PROGMEM\s+(\w+)\[\]\s*=\s*\{(.*?)\}", src, re.S):
+    if "COMBO_END" not in m.group(2):
+        continue
+    combo_keys[m.group(1)] = [k for k in split_top_level(m.group(2)) if k and k != "COMBO_END"]
+for m in re.finditer(r"COMBO\(", src):
+    depth, i = 1, m.end()
+    while depth and i < len(src):
+        depth += (src[i] == "(") - (src[i] == ")")
+        i += 1
+    parts = split_top_level(src[m.end():i - 1])
+    if len(parts) == 2:
+        combo_actions[parts[0]] = parts[1]
+
+by_keys = {}
+for name, keys in combo_keys.items():
+    by_keys.setdefault(frozenset(keys), []).append(name)
+for keys, names in sorted(by_keys.items(), key=lambda kv: sorted(kv[1])):
+    if len(names) > 1:
+        which = ", ".join(f"{n} -> {combo_actions.get(n, '?')}" for n in sorted(names))
+        fail(f"these combos use the same keys ({' + '.join(sorted(keys))}): {which}. "
+             f"QMK matches combos as unordered sets, so they conflict and the last "
+             f"one listed wins -- give them different keys in Oryx.")
+
 revision = ""
 try:
     cfg = open(os.path.join(layout_dir, "config.h")).read()
@@ -122,7 +151,7 @@ for name, idx in sorted(bases.items()):
              f"{len(layers)} layers (0-{max(layers) if layers else -1})")
 
 print(f"verify_layout: {summary['layout_dir']} revision {summary['revision'] or '?'}, "
-      f"{summary['layer_count']} layers")
+      f"{summary['layer_count']} layers, {len(combo_keys)} combos")
 for name, idx in sorted(bases.items(), key=lambda kv: kv[1]):
     info = layers.get(idx)
     if info:

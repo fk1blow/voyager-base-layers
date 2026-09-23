@@ -58,6 +58,29 @@ would silently attach to the wrong chord after an unrelated edit.
 part of the variant marker, so a tree customized for one term is never reused
 for another.
 
+### Two combos, one chord
+
+QMK matches a combo as an unordered **set** of keys: `{3,4,1,2}` and `{1,2,3,4}`
+are the same chord. Oryx shows combos as ordered lists, which makes them look
+different, and it will let you define both -- it has also duplicated one on its
+own. Both then fire on the same press, the last entry in `key_combos[]` wins,
+and the other combo looks simply dead. Worse, it only shows up on the board,
+after a flash.
+
+`verify_layout.sh` groups the generated combos by key set and hard-fails on a
+collision, naming both combos and their actions:
+
+```
+verify_layout: ERROR: these combos use the same keys (KC_1 + KC_BSPC):
+  combo3 -> TO(2), combo4 -> TO(0). QMK matches combos as unordered sets, so
+  they conflict and the last one listed wins -- give them different keys in Oryx.
+```
+
+It parses `comboN[]` and `COMBO(comboN, ...)` straight out of `keymap.c`, so it
+needs no snapshot and works on a first run. `host/tests/test_verify_layout.py`
+covers both shapes this has actually taken, plus keycodes with parentheses
+(`MT(MOD_LCTL, KC_ESCAPE)` must not split on its inner comma).
+
 ### Layer order
 
 Oryx names nothing. Its `keymap.c` is `[0] = LAYOUT_voyager(...)` through `[5]`, and

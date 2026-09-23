@@ -37,12 +37,19 @@ class VerifyLayout(unittest.TestCase):
             for name, idx in bases.items():
                 f.write(f"{name}={idx}\n")
 
-    def write_layers(self, *payloads):
+    def write_layers(self, *payloads, combos=None):
         body = "".join(f"  [{i}] = LAYOUT_voyager({p}),\n"
                        for i, p in enumerate(payloads))
+        out = "const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {\n" + body + "};\n"
+        if combos:
+            for i, (keys, _) in enumerate(combos):
+                out += f"const uint16_t PROGMEM combo{i}[] = {{ {keys}, COMBO_END}};\n"
+            out += "combo_t key_combos[COMBO_COUNT] = {\n"
+            out += "".join(f"    COMBO(combo{i}, {act}),\n"
+                           for i, (_, act) in enumerate(combos))
+            out += "};\n"
         with open(os.path.join(self.root, "fake", "keymap.c"), "w") as f:
-            f.write("const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {\n"
-                    + body + "};\n")
+            f.write(out)
 
     def verify(self, update=False):
         cmd = [os.path.join(self.root, "tools", "verify_layout.sh")]
@@ -85,6 +92,54 @@ class VerifyLayout(unittest.TestCase):
         r = self.verify()
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("keys changed", r.stdout)
+
+    # --- combos --------------------------------------------------------
+    def test_same_keys_in_a_different_order_is_a_hard_failure(self):
+        """The bug Oryx shipped: {3,4,1,2} and {1,2,3,4} are one chord."""
+        self.write_layers(MAC, SYM, OMARCHY, NAV, combos=[
+            ("KC_3, KC_4, KC_1, KC_2", "TO(3)"),
+            ("KC_1, KC_2, KC_3, KC_4", "TO(2)"),
+        ])
+        r = self.verify()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("same keys", r.stderr)
+        self.assertIn("combo0 -> TO(3)", r.stderr)
+        self.assertIn("combo1 -> TO(2)", r.stderr)
+
+    def test_duplicated_combo_is_a_hard_failure(self):
+        """And the one it shipped next: the same chord listed twice."""
+        self.write_layers(MAC, SYM, OMARCHY, NAV, combos=[
+            ("KC_BSPC, KC_1", "TO(2)"),
+            ("KC_BSPC, KC_1", "TO(0)"),
+        ])
+        r = self.verify()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("KC_1 + KC_BSPC", r.stderr)
+
+    def test_distinct_combos_are_fine(self):
+        self.write_layers(MAC, SYM, OMARCHY, NAV, combos=[
+            ("KC_SLASH, KC_ENTER", "TO(3)"),
+            ("KC_BSPC, KC_0", "TO(2)"),
+        ])
+        r = self.verify()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("2 combos", r.stdout)
+
+    def test_keycodes_with_parentheses_parse(self):
+        """MEH_T(KC_SPACE) holds a comma-free paren group; do not split on it."""
+        self.write_layers(MAC, SYM, OMARCHY, NAV, combos=[
+            ("MEH_T(KC_SPACE), MT(MOD_LCTL, KC_ESCAPE)", "TG(5)"),
+            ("KC_B, KC_V", "KC_SPACE"),
+        ])
+        r = self.verify()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("2 combos", r.stdout)
+
+    def test_a_layout_with_no_combos_is_fine(self):
+        self.write_layers(MAC, SYM, OMARCHY, NAV)
+        r = self.verify()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("0 combos", r.stdout)
 
     def test_base_index_past_the_end_still_fails(self):
         self.write_conf(mac=0, omarchy=9)
