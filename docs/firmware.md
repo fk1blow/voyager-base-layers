@@ -9,9 +9,16 @@ QMK hook added at build time.
 This is the routine you will actually use. It is designed so that editing the layout in Oryx
 never means redoing the custom work.
 
+`tools/refresh.sh` runs steps 2-6 and the install, then stops and hands you the `.bin`. It
+refuses to start on a dirty tree, on a branch other than `main`, or with unpushed commits,
+because the workflow pushes to `main` and the pull afterwards has to fast-forward. Flashing
+stays manual: Keymapp is a GUI, and putting the wrong file on the board is worth doing by
+hand. The steps below are what it automates.
+
 1. Edit the layout in Oryx, then press **Compile** there.
-2. Run the **Fetch and build layout** workflow (`layout_id: 7m5PJ`, `layout_geometry: voyager`).
-   The ZSA browser extension can start it from inside Oryx.
+2. Run the **Fetch and build layout** workflow (`layout_id: 7m5PJ`). The ZSA browser
+   extension can start it from inside Oryx. Leave `layout_geometry` alone — it is the
+   template's knob for its other boards, and `voyager` is already the default.
 3. The workflow fetches into the `oryx` branch, merges into `main`, verifies the layout,
    applies the customizations, and builds.
 4. If it fails, the log names the anchor that broke. Usually a one-line pattern fix in
@@ -19,7 +26,8 @@ never means redoing the custom work.
 5. If you renumbered a layer, update `tools/layers.conf` and re-run — **and** re-run
    `host/install.sh` so `~/.config/voyager-layer/config` matches. This is the one change that
    has to land on both sides; if they drift you get
-   `error: asked for omarchy (2), keyboard reports …`.
+   `error: asked for omarchy (2), keyboard reports …`. See *Layer order* below — you do not
+   have to notice this yourself.
 6. The workflow has **already committed and pushed** the refreshed layout — it does that
    before it verifies or builds. Read the diff the **Verify layout assumptions** step printed;
    if the change was intentional, run `tools/verify_layout.sh --update` locally and commit the
@@ -28,6 +36,28 @@ never means redoing the custom work.
 7. Download the `.bin` artifact and flash it with Keymapp.
 8. Re-check: `voyager-layer status`, LEDs dark on both bases, and the per-key amber indicator
    still following the base.
+
+### Layer order
+
+Oryx names nothing. Its `keymap.c` is `[0] = LAYOUT_voyager(...)` through `[5]`, and
+`keymap.json` carries only the module list, so nothing in the generated output says which
+layer is the Omarchy base. `tools/layers.conf` asserts it, and a reorder in Oryx silently
+invalidates that assertion: if `omarchy` slides from 2 to 3, layer 2 still exists, so an
+index-range check passes and you flash a board whose Omarchy base is a symbol layer.
+
+So the snapshot records a fingerprint — a hash of each layer's key list — plus one per base
+under `bases`, keyed by name. On the next run `verify_layout.sh` asks whether the keys it
+recorded for `omarchy` are still at the index `layers.conf` claims:
+
+- **Same index, same keys** — nothing to say.
+- **Moved to another index** — hard failure, naming the index to put in `layers.conf`. This is
+  the case that would otherwise bite after flashing.
+- **Still at that index, keys changed** — you edited the base. Reported as an ordinary change.
+- **Ambiguous** (the old keys now match several layers, e.g. two blank ones) — hard failure
+  asking you to check Oryx by hand rather than guessing.
+
+`host/tests/test_verify_layout.py` drives all of these against synthetic Oryx output. A
+snapshot recorded before fingerprints existed says so and skips the check until `--update`.
 
 ### Three rules that make this work
 
