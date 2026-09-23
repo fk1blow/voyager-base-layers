@@ -9,18 +9,30 @@
 # output so an anchor no longer matches, exit non-zero with a clear message
 # rather than guess. A failed build is wanted; a silently skipped edit is not.
 #
-# Usage: tools/apply_customizations.sh [--dry-run] [--os-detection] [--keyboard-reset] [LAYOUT_DIR]
+# Usage: tools/apply_customizations.sh [--dry-run] [--os-detection] [--keyboard-reset]
+#                                      [--combo-term MS] [LAYOUT_DIR]
 set -euo pipefail
 
 MARKER="base-layers: applied by tools/apply_customizations.sh"
 DRY_RUN=0
 OS_DETECTION=0
 KEYBOARD_RESET=0
+# QMK's default COMBO_TERM (50) is too tight for a two-handed layer-switch
+# chord. Applied only to combos whose action is TO()/TG(); see base_layers.c.
+COMBO_TERM_MS=150
 LAYOUT_DIR=""
 
+EXPECT_COMBO_TERM=0
 for arg in "$@"; do
+    if [ "$EXPECT_COMBO_TERM" -eq 1 ]; then
+        case "$arg" in
+            ''|*[!0-9]*) echo "--combo-term needs a number of milliseconds" >&2; exit 2 ;;
+        esac
+        COMBO_TERM_MS="$arg"; EXPECT_COMBO_TERM=0; continue
+    fi
     case "$arg" in
         --dry-run) DRY_RUN=1 ;;
+        --combo-term) EXPECT_COMBO_TERM=1 ;;
         --os-detection) OS_DETECTION=1 ;;
         # only meaningful with OS detection, so it turns that on too
         --keyboard-reset) KEYBOARD_RESET=1; OS_DETECTION=1 ;;
@@ -57,7 +69,8 @@ done
 # The variant is recorded in the marker so a tree customized for one set of
 # options is never silently reused for another.
 VARIANT="$MARKER (os-detection: $([ "$OS_DETECTION" -eq 1 ] && echo on || echo off)"
-VARIANT="$VARIANT, keyboard-reset: $([ "$KEYBOARD_RESET" -eq 1 ] && echo on || echo off))"
+VARIANT="$VARIANT, keyboard-reset: $([ "$KEYBOARD_RESET" -eq 1 ] && echo on || echo off)"
+VARIANT="$VARIANT, combo-term: ${COMBO_TERM_MS}ms)"
 
 # A tree customized for the other variant must not be silently reused.
 check_variant() {
@@ -144,6 +157,11 @@ else
 $DETECT_LINE
 $RESET_LINE
 // #define BASE_LAYERS_KEEP_PAIRING      // don't clear the pairing flag on base switches
+
+// Layer-switch chords (TO/TG) get a longer window than QMK's 50ms default;
+// every other combo keeps it, so letter combos cannot fire mid-word.
+#define COMBO_TERM_PER_COMBO
+#define BASE_LAYERS_COMBO_TERM $COMBO_TERM_MS
 EOF
 )"$'\n'
     changed "config.h: options block"
@@ -198,5 +216,5 @@ fi
 if [ "$DRY_RUN" -eq 1 ]; then
     note "dry run: $CHANGES edit(s) would be applied"
 else
-    note "$CHANGES edit(s) applied (os-detection: $([ "$OS_DETECTION" -eq 1 ] && echo on || echo off), keyboard-reset: $([ "$KEYBOARD_RESET" -eq 1 ] && echo on || echo off))"
+    note "$CHANGES edit(s) applied (os-detection: $([ "$OS_DETECTION" -eq 1 ] && echo on || echo off), keyboard-reset: $([ "$KEYBOARD_RESET" -eq 1 ] && echo on || echo off), combo-term: ${COMBO_TERM_MS}ms)"
 fi

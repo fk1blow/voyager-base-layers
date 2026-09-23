@@ -47,6 +47,24 @@ layer_state_t base_layers_fold(layer_state_t state) {
     return state;
 }
 
+#if defined(COMBO_ENABLE) && defined(COMBO_TERM_PER_COMBO)
+// A chord that switches layers is usually two-handed, and QMK's default
+// COMBO_TERM of 50ms is too tight for that: miss the window and the combo is
+// abandoned, so the keys arrive as ordinary keystrokes and the layer never
+// changes. Raising COMBO_TERM globally is not an option -- combos on letter
+// keys would start firing mid-word, e.g. B and V inside "obvious".
+//
+// Keyed on the combo's ACTION, never its index: Oryx renumbers combo0..comboN
+// whenever one is added or removed, so an index-based rule would silently
+// attach itself to the wrong chord after an unrelated edit in Oryx.
+uint16_t get_combo_term(uint16_t combo_index, combo_t *combo) {
+    if (IS_QK_TO(combo->keycode) || IS_QK_TOGGLE_LAYER(combo->keycode)) {
+        return BASE_LAYERS_COMBO_TERM;
+    }
+    return COMBO_TERM;
+}
+#endif
+
 #if defined(OS_DETECTION_ENABLE) && defined(BASE_LAYERS_OS_DETECTION)
 bool process_detected_host_os_user(os_variant_t os) {
     default_layer_set((layer_state_t)1 << (os == OS_LINUX ? BASE_OMARCHY : BASE_MAC));

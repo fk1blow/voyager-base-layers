@@ -37,6 +37,27 @@ hand. The steps below are what it automates.
 8. Re-check: `voyager-layer status`, LEDs dark on both bases, and the per-key amber indicator
    still following the base.
 
+### Combo timing
+
+QMK's default `COMBO_TERM` is 50 ms: every key of a combo must go down within
+50 ms of the first, or the combo is abandoned and the keys arrive as ordinary
+keystrokes. A chord that switches layers tends to be two-handed and misses that
+window easily -- it looks exactly like "the combo does nothing", except a stray
+character is typed.
+
+Raising `COMBO_TERM` globally is not the fix: Oryx layouts put combos on letter
+keys too, and at 150 ms a `B`+`V` combo fires inside "obvious". So
+`base_layers.c` defines `get_combo_term()` and lengthens only the combos whose
+action is `TO()` or `TG()`; everything else keeps the default.
+
+It is keyed on the combo's **action**, never its index. Oryx renumbers
+`combo0..comboN` whenever a combo is added or removed, so an index-based rule
+would silently attach to the wrong chord after an unrelated edit.
+
+`tools/apply_customizations.sh --combo-term MS` changes the window; the value is
+part of the variant marker, so a tree customized for one term is never reused
+for another.
+
 ### Layer order
 
 Oryx names nothing. Its `keymap.c` is `[0] = LAYOUT_voyager(...)` through `[5]`, and
@@ -114,6 +135,7 @@ it. Identical on the wire.
 | `BASE_LAYERS_OS_DETECTION` | pick the base layer from the detected host OS (needs `OS_DETECTION_ENABLE`) |
 | `OS_DETECTION_KEYBOARD_RESET` | re-detect when a KVM or dock changes hosts without power loss |
 | `BASE_LAYERS_KEEP_PAIRING` | do not clear the pairing flag on base switches |
+| `COMBO_TERM_PER_COMBO` + `BASE_LAYERS_COMBO_TERM` | how long a layer-switch chord may take, in ms (default 150) |
 
 The first two have build flags: run the workflow with `os_detection: true`, and
 `keyboard_reset: true` if a dock hands the board over without cutting power (that one implies
