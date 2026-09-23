@@ -60,21 +60,37 @@ jobs:
           
           curl -L "https://oryx.zsa.io/source/${hash_id}" -o source.zip
           
-          echo firmware_version=${firmware_version} >> "$GITHUB_OUTPUT"
-          echo change_description=${change_description} >> "$GITHUB_OUTPUT"
+          echo "firmware_version=${firmware_version}" >> "$GITHUB_OUTPUT"
+          # Heredoc form: an Oryx title may contain quotes, or even newlines.
+          {
+            echo "change_description<<ORYX_EOF"
+            echo "${change_description}"
+            echo "ORYX_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Unzip the source file
         run: |
           unzip -oj source.zip '*_source/*' -d ${{ github.event.inputs.layout_id }}
           rm source.zip
 
+      # The description goes through the environment, never straight into the
+      # shell: an Oryx revision title like `fix "to gaming" combos` used to end
+      # the -m string early, git read the rest as pathspecs and refused to
+      # commit -- and `|| echo` hid that until `checkout -B main` tripped over
+      # the still-uncommitted files two steps later.
       - name: Commit and Push changes
+        env:
+          CHANGE_DESCRIPTION: ${{ steps.download-layout-source.outputs.change_description }}
         run: |
           git config --local user.name "github-actions"
           git config --local user.email "github-actions@github.com"
           git add .
-          git commit -m "✨(oryx): ${{ steps.download-layout-source.outputs.change_description }}" || echo "No layout change"
-          git push
+          if git diff --cached --quiet; then
+            echo "No layout change"
+          else
+            git commit -m "✨(oryx): ${CHANGE_DESCRIPTION}"
+            git push
+          fi
 
       - name: Merge Oryx with custom QMK
         run: |
