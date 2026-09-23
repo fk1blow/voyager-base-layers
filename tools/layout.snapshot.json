@@ -12,7 +12,8 @@
         "MEH_T(KC_SPACE)",
         "MO(4)",
         "LT(1, KC_SPACE)"
-      ]
+      ],
+      "hash": "3ce2c988cd92"
     },
     {
       "index": 1,
@@ -23,7 +24,8 @@
         "LCTL(KC_SPACE)",
         "KC_TRANSPARENT",
         "KC_TRANSPARENT"
-      ]
+      ],
+      "hash": "c730b3b338e4"
     },
     {
       "index": 2,
@@ -34,7 +36,8 @@
         "KC_TRANSPARENT",
         "KC_TRANSPARENT",
         "LT(3, KC_SPACE)"
-      ]
+      ],
+      "hash": "7e438c513912"
     },
     {
       "index": 3,
@@ -45,7 +48,8 @@
         "KC_TRANSPARENT",
         "KC_TRANSPARENT",
         "KC_TRANSPARENT"
-      ]
+      ],
+      "hash": "f3dbbd45120c"
     },
     {
       "index": 4,
@@ -56,7 +60,8 @@
         "KC_TRANSPARENT",
         "KC_TRANSPARENT",
         "KC_TRANSPARENT"
-      ]
+      ],
+      "hash": "55ec0b06d7e8"
     },
     {
       "index": 5,
@@ -67,7 +72,18 @@
         "KC_TRANSPARENT",
         "KC_TRANSPARENT",
         "KC_TRANSPARENT"
-      ]
+      ],
+      "hash": "85d29f14759a"
     }
-  ]
+  ],
+  "bases": {
+    "mac": {
+      "index": 0,
+      "hash": "3ce2c988cd92"
+    },
+    "omarchy": {
+      "index": 2,
+      "hash": "7e438c513912"
+    }
+  }
 }

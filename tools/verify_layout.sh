@@ -33,7 +33,7 @@ if [ -z "$LAYOUT_DIR" ]; then
 fi
 
 UPDATE="$UPDATE" python3 - "$LAYOUT_DIR" "$REPO_ROOT/tools/layers.conf" "$REPO_ROOT/tools/layout.snapshot.json" <<'PY'
-import json, os, re, sys
+import hashlib, json, os, re, sys
 
 layout_dir, layers_conf, snapshot_path = sys.argv[1], sys.argv[2], sys.argv[3]
 update = os.environ.get("UPDATE") == "1"
@@ -86,6 +86,9 @@ for m in re.finditer(r"\[(\d+)\]\s*=\s*LAYOUT\w*\(", src):
         "keys": len(keys),
         "non_transparent": sum(1 for k in keys if k != "KC_TRANSPARENT"),
         "thumbs": keys[-4:],
+        # identity, not just shape: this is what catches a layer that moved to a
+        # different index in Oryx while layers.conf kept pointing at the old one.
+        "hash": hashlib.sha1("\n".join(keys).encode()).hexdigest()[:12],
     }
 
 if not layers:
@@ -104,6 +107,8 @@ summary = {
     "revision": revision,
     "layer_count": len(layers),
     "layers": [dict(index=i, **layers[i]) for i in sorted(layers)],
+    "bases": {name: {"index": idx, "hash": layers[idx]["hash"]}
+              for name, idx in sorted(bases.items()) if idx in layers},
 }
 
 # --- hard checks ------------------------------------------------------------
@@ -154,6 +159,32 @@ else:
             changes.append(f"layer {i}: thumbs {prev.get('thumbs')} -> {cur['thumbs']}")
     for i in sorted(set(oldl) - {l["index"] for l in summary["layers"]}):
         changes.append(f"layer {i}: removed")
+    # --- did a base layer move? (hard) ---------------------------------
+    old_bases = old.get("bases") or {}
+    if not old_bases:
+        print("  (snapshot predates base fingerprints -- run --update to record them)")
+    else:
+        by_hash = {}
+        for l in summary["layers"]:
+            by_hash.setdefault(l["hash"], []).append(l["index"])
+        for name, idx in sorted(bases.items(), key=lambda kv: kv[1]):
+            prev = old_bases.get(name)
+            if not prev or idx not in layers:
+                continue
+            if prev["hash"] == layers[idx]["hash"]:
+                continue
+            found = by_hash.get(prev["hash"], [])
+            if len(found) == 1:
+                fail(f"base '{name}' is layer {idx} in layers.conf, but that layer's "
+                     f"keys are now at layer {found[0]} -- Oryx reordered the layers. "
+                     f"Set {name}={found[0]} in tools/layers.conf and re-run "
+                     f"host/install.sh before flashing.")
+            elif len(found) > 1:
+                fail(f"base '{name}' (layer {idx}) changed, and its old keys now match "
+                     f"layers {found} -- check the order in Oryx by hand.")
+            else:
+                changes.append(f"base '{name}' (layer {idx}): keys changed")
+
     if changes:
         print("  changes since the last reviewed snapshot:")
         for c in changes:
