@@ -1,7 +1,7 @@
 {
   "layout_dir": "7m5PJ",
-  "revision": "7m5PJ/m57ajN",
-  "layer_count": 6,
+  "revision": "7m5PJ/rba9rJ",
+  "layer_count": 7,
   "layers": [
     {
       "index": 0,
@@ -25,19 +25,19 @@
         "KC_TRANSPARENT",
         "KC_TRANSPARENT"
       ],
-      "hash": "c730b3b338e4"
+      "hash": "508f6b5aacee"
     },
     {
       "index": 2,
       "keys": 52,
-      "non_transparent": 1,
+      "non_transparent": 29,
       "thumbs": [
-        "KC_TRANSPARENT",
+        "KC_LEFT_GUI",
         "KC_TRANSPARENT",
         "KC_TRANSPARENT",
         "LT(3, KC_SPACE)"
       ],
-      "hash": "7e438c513912"
+      "hash": "dbe2da5f0fa5"
     },
     {
       "index": 3,
@@ -74,6 +74,18 @@
         "KC_TRANSPARENT"
       ],
       "hash": "85d29f14759a"
+    },
+    {
+      "index": 6,
+      "keys": 52,
+      "non_transparent": 9,
+      "thumbs": [
+        "KC_LEFT_SHIFT",
+        "KC_SPACE",
+        "KC_TRANSPARENT",
+        "KC_TRANSPARENT"
+      ],
+      "hash": "ad760bfe091a"
     }
   ],
   "bases": {
@@ -83,7 +95,7 @@
     },
     "omarchy": {
       "index": 2,
-      "hash": "7e438c513912"
+      "hash": "dbe2da5f0fa5"
     }
   }
 }
