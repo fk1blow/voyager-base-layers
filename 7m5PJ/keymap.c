@@ -24,6 +24,7 @@ enum tap_dance_codes {
   DANCE_3,
 };
 
+#define DUAL_FUNC_0 LT(4, KC_F19)
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [0] = LAYOUT_voyager(
@@ -51,7 +52,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     KC_TRANSPARENT, LALT(LCTL(LSFT(KC_1))),LALT(LCTL(LSFT(KC_2))),LALT(LCTL(LSFT(KC_3))),LALT(LCTL(LSFT(KC_4))),KC_TRANSPARENT,                                 RGUI(RSFT(KC_LEFT)),RGUI(KC_LEFT),  RGUI(KC_RIGHT), RGUI(RSFT(KC_RIGHT)),KC_TRANSPARENT, RCTL(KC_BSPC),  
     KC_TRANSPARENT, KC_TRANSPARENT, LCTL(KC_W),     KC_TRANSPARENT, KC_TRANSPARENT, TD(DANCE_2),                                    KC_HOME,        KC_MS_WH_DOWN,  KC_MS_WH_UP,    KC_END,         KC_TRANSPARENT, KC_AUDIO_VOL_UP,
     KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, TD(DANCE_3),    KC_TRANSPARENT,                                 KC_LEFT,        KC_DOWN,        KC_UP,          KC_RIGHT,       KC_TRANSPARENT, KC_AUDIO_VOL_DOWN,
-    KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 RCTL(KC_N),     RCTL(RSFT(KC_TAB)),RCTL(KC_TAB),   KC_TRANSPARENT, KC_TRANSPARENT, KC_AUDIO_MUTE,  
+    KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 DUAL_FUNC_0,    RCTL(RSFT(KC_TAB)),RCTL(KC_TAB),   RCTL(KC_W),     RCTL(RSFT(KC_T)),KC_AUDIO_MUTE,  
                                                     KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT
   ),
   [4] = LAYOUT_voyager(
@@ -116,6 +117,8 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
             return TAPPING_TERM -20;
         case LT(3, KC_SPACE):
             return TAPPING_TERM -20;
+        case DUAL_FUNC_0:
+            return TAPPING_TERM -40;
         default:
             return TAPPING_TERM;
     }
@@ -429,6 +432,21 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     }
     break;
 
+    case DUAL_FUNC_0:
+      if (record->tap.count > 0) {
+        if (record->event.pressed) {
+          register_code16(RCTL(KC_T));
+        } else {
+          unregister_code16(RCTL(KC_T));
+        }
+      } else {
+        if (record->event.pressed) {
+          register_code16(RCTL(KC_N));
+        } else {
+          unregister_code16(RCTL(KC_N));
+        }  
+      }  
+      return false;
     case RGB_SLD:
       if (record->event.pressed) {
         rgblight_mode(1);
