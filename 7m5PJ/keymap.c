@@ -35,7 +35,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   ),
   [1] = LAYOUT_voyager(
     KC_TRANSPARENT, LALT(KC_1),     LALT(KC_2),     LALT(KC_3),     LALT(KC_4),     KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, RALT(KC_BSPC),  
-    KC_TRANSPARENT, KC_TRANSPARENT, LGUI(KC_W),     KC_TRANSPARENT, KC_TRANSPARENT, TD(DANCE_0),                                    LALT(KC_LEFT),  RGUI(KC_LEFT),  RGUI(KC_RIGHT), LALT(KC_RIGHT), KC_TRANSPARENT, KC_AUDIO_VOL_UP,
+    KC_TRANSPARENT, KC_TRANSPARENT, LGUI(KC_W),     KC_TRANSPARENT, KC_TRANSPARENT, TD(DANCE_0),                                    RALT(KC_LEFT),  KC_MS_WH_DOWN,  KC_MS_WH_UP,    RALT(KC_RIGHT), KC_TRANSPARENT, KC_AUDIO_VOL_UP,
     KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, TD(DANCE_1),    KC_TRANSPARENT,                                 KC_LEFT,        KC_DOWN,        KC_UP,          KC_RIGHT,       KC_TRANSPARENT, KC_AUDIO_VOL_DOWN,
     KC_LEFT_CTRL,   KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 RGUI(KC_N),     LCTL(LSFT(KC_TAB)),LCTL(KC_TAB),   KC_TRANSPARENT, KC_TRANSPARENT, KC_AUDIO_MUTE,  
                                                     KC_TRANSPARENT, LCTL(KC_SPACE),                                 KC_TRANSPARENT, KC_TRANSPARENT
@@ -49,7 +49,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   ),
   [3] = LAYOUT_voyager(
     KC_TRANSPARENT, LALT(LCTL(LSFT(KC_1))),LALT(LCTL(LSFT(KC_2))),LALT(LCTL(LSFT(KC_3))),LALT(LCTL(LSFT(KC_4))),KC_TRANSPARENT,                                 RGUI(RSFT(KC_LEFT)),RGUI(KC_LEFT),  RGUI(KC_RIGHT), RGUI(RSFT(KC_RIGHT)),KC_TRANSPARENT, RCTL(KC_BSPC),  
-    KC_TRANSPARENT, KC_TRANSPARENT, LCTL(KC_W),     KC_TRANSPARENT, KC_TRANSPARENT, TD(DANCE_2),                                    RCTL(KC_LEFT),  KC_HOME,        KC_END,         RCTL(KC_RIGHT), KC_TRANSPARENT, KC_AUDIO_VOL_UP,
+    KC_TRANSPARENT, KC_TRANSPARENT, LCTL(KC_W),     KC_TRANSPARENT, KC_TRANSPARENT, TD(DANCE_2),                                    KC_HOME,        KC_MS_WH_DOWN,  KC_MS_WH_UP,    KC_END,         KC_TRANSPARENT, KC_AUDIO_VOL_UP,
     KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, TD(DANCE_3),    KC_TRANSPARENT,                                 KC_LEFT,        KC_DOWN,        KC_UP,          KC_RIGHT,       KC_TRANSPARENT, KC_AUDIO_VOL_DOWN,
     KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 RCTL(KC_N),     RCTL(RSFT(KC_TAB)),RCTL(KC_TAB),   KC_TRANSPARENT, KC_TRANSPARENT, KC_AUDIO_MUTE,  
                                                     KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT
@@ -385,7 +385,7 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   case QK_MODS ... QK_MODS_MAX:
     // Mouse and consumer keys (volume, media) with modifiers work inconsistently across operating systems,
     // this makes sure that modifiers are always applied to the key that was pressed.
-    if (IS_CONSUMER_KEYCODE(QK_MODS_GET_BASIC_KEYCODE(keycode))) {
+    if (IS_MOUSE_KEYCODE(QK_MODS_GET_BASIC_KEYCODE(keycode)) || IS_CONSUMER_KEYCODE(QK_MODS_GET_BASIC_KEYCODE(keycode))) {
       if (record->event.pressed) {
         add_mods(QK_MODS_GET_MODS(keycode));
         send_keyboard_report();
