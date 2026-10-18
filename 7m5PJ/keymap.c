@@ -24,8 +24,8 @@ enum tap_dance_codes {
   DANCE_3,
 };
 
-#define DUAL_FUNC_0 LT(15, KC_2)
-#define DUAL_FUNC_1 LT(1, KC_3)
+#define DUAL_FUNC_0 LT(5, KC_K)
+#define DUAL_FUNC_1 LT(14, KC_4)
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [0] = LAYOUT_voyager(
@@ -47,7 +47,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     KC_TAB,         KC_Q,           KC_W,           KC_E,           KC_R,           KC_T,                                           KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
     KC_LEFT_SHIFT,  KC_A,           KC_S,           KC_D,           KC_F,           KC_G,                                           KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, 
     MT(MOD_LCTL, KC_ESCAPE),KC_Z,           KC_X,           KC_C,           KC_V,           KC_B,                                           KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_SLASH,       KC_ENTER,       
-                                                    LM(7,MOD_LGUI), KC_TRANSPARENT,                                 LT(4, KC_BSPC), LT(3, KC_SPACE)
+                                                    LM(7,MOD_LGUI), KC_TRANSPARENT,                                 MO(4),          LT(3, KC_SPACE)
   ),
   [3] = LAYOUT_voyager(
     KC_TRANSPARENT, LALT(LCTL(LSFT(KC_1))),LALT(LCTL(LSFT(KC_2))),LALT(LCTL(LSFT(KC_3))),LALT(LCTL(LSFT(KC_4))),KC_TRANSPARENT,                                 RGUI(RSFT(KC_LEFT)),RGUI(KC_LEFT),  RGUI(KC_RIGHT), RGUI(RSFT(KC_RIGHT)),KC_TRANSPARENT, RCTL(KC_BSPC),  
@@ -122,8 +122,6 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
         case MO(4):
             return TAPPING_TERM -60;
         case LT(1, KC_SPACE):
-            return TAPPING_TERM -20;
-        case LT(4, KC_BSPC):
             return TAPPING_TERM -20;
         case LT(3, KC_SPACE):
             return TAPPING_TERM -20;
