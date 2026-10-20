@@ -10,3 +10,8 @@ base_layers_config.h
 
 # Firmware downloaded by tools/refresh.sh
 build/
+# copied in from firmware/ by tools/apply_customizations.sh
+/*/base_layers.c
+/*/base_layers.h
+!/firmware/base_layers.c
+!/firmware/base_layers.h

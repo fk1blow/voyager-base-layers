@@ -105,9 +105,10 @@ snapshot recorded before fingerprints existed says so and skips the check until 
 
 ### Three rules that make this work
 
-1. **Generated files are never edited in git.** `7m5PJ/` holds exactly what Oryx produced, so
-   the template's `git merge -Xignore-all-space oryx` can never conflict. The only files
-   committed inside it are `base_layers.c` and `base_layers.h`.
+1. **Generated files are never edited in git.** Each layout folder (`7m5PJ/`, `VQDje/`, ...)
+   holds exactly what Oryx produced, so the template's `git merge -Xignore-all-space oryx` can
+   never conflict. The hand-written `base_layers.c` and `base_layers.h` live once in
+   `firmware/` and are copied into whichever layout is being built, so any layout id works.
 2. **Customizations are applied at build time**, idempotently, by a script that fails loudly.
 3. **Every refresh prints a diff** of what changed in the layout, so a renumbered layer cannot
    slip through silently.

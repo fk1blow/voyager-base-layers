@@ -64,7 +64,13 @@ GENERATED="$LAYOUT_DIR/base_layers_config.h"
 for f in "$KEYMAP" "$RULES" "$CONFIG"; do
     [ -f "$f" ] || die "missing generated file: $f"
 done
-[ -f "$LAYOUT_DIR/base_layers.c" ] || die "missing $LAYOUT_DIR/base_layers.c (should be committed)"
+# Hand-written sources live once in firmware/, shared by every layout. They are
+# copied in at build time, like every other edit here, so a new Oryx layout id
+# needs nothing committed for it.
+FIRMWARE_DIR="$REPO_ROOT/firmware"
+for f in base_layers.c base_layers.h; do
+    [ -f "$FIRMWARE_DIR/$f" ] || die "missing firmware/$f (should be committed)"
+done
 
 # The variant is recorded in the marker so a tree customized for one set of
 # options is never silently reused for another.
@@ -124,6 +130,16 @@ else
     write "$GENERATED" "$generated_content"
     changed "base_layers_config.h (mac=$MAC omarchy=$OMARCHY)"
 fi
+
+# --- 1b. copy the shared sources into the layout ---------------------------
+for f in base_layers.c base_layers.h; do
+    if [ -f "$LAYOUT_DIR/$f" ] && cmp -s "$FIRMWARE_DIR/$f" "$LAYOUT_DIR/$f"; then
+        skipped "$f"
+    else
+        [ "$DRY_RUN" -eq 1 ] || cp "$FIRMWARE_DIR/$f" "$LAYOUT_DIR/$f"
+        changed "$f (from firmware/)"
+    fi
+done
 
 # --- 2. rules.mk: build base_layers.c ---------------------------------------
 if check_variant "$RULES"; then
