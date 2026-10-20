@@ -38,11 +38,19 @@ else
     echo "shellcheck not installed - skipping (CI runs it)"
 fi
 
+# Every Oryx layout in the repo gets checked, each against its own snapshot.
+mapfile -t LAYOUTS < <(find . -mindepth 2 -maxdepth 2 -name keymap.c -not -path './qmk_firmware/*' -printf '%h\n' | sed 's|^\./||' | sort -u)
+
 step "layout assumptions"
-./tools/verify_layout.sh || fail "verify_layout.sh"
+[ "${#LAYOUTS[@]}" -gt 0 ] || fail "no layout folder (a <layout-id>/keymap.c) found"
+for layout in "${LAYOUTS[@]}"; do
+    ./tools/verify_layout.sh "$layout" || fail "verify_layout.sh $layout"
+done
 
 step "customizations (dry run)"
-./tools/apply_customizations.sh --dry-run || fail "apply_customizations.sh --dry-run"
+for layout in "${LAYOUTS[@]}"; do
+    ./tools/apply_customizations.sh --dry-run "$layout" || fail "apply_customizations.sh --dry-run $layout"
+done
 
 printf '\n'
 if [ "$FAILED" -ne 0 ]; then

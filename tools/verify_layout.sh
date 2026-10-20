@@ -6,12 +6,14 @@
 #
 # Hard failures (exit 1): a base index out of range, both bases equal, or fewer
 # layers than tools/layers.conf needs.
-# Soft report: a diff against tools/layout.snapshot.json, printed, never fatal.
+# Soft report: a diff against tools/snapshots/<layout-id>.json, printed, never fatal.
+# Each layout has its own snapshot, so two layouts never diff against each other.
 #
 # Note: PLAN.md §11.3 says to summarise from keymap.json, but Oryx's keymap.json
 # contains only the module list -- no layers. We parse keymap.c instead.
 #
 # Usage: tools/verify_layout.sh [--update] [LAYOUT_DIR]
+#   LAYOUT_DIR may be omitted only when the repo holds a single layout.
 set -euo pipefail
 
 UPDATE=0
@@ -28,11 +30,15 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [ -z "$LAYOUT_DIR" ]; then
     mapfile -t candidates < <(find "$REPO_ROOT" -maxdepth 2 -name keymap.c -not -path '*/qmk_firmware/*' -printf '%h\n' | sort -u)
-    [ "${#candidates[@]}" -eq 1 ] || { echo "verify_layout: ERROR: expected one layout dir, found ${#candidates[@]}" >&2; exit 1; }
+    [ "${#candidates[@]}" -eq 1 ] || { echo "verify_layout: ERROR: found ${#candidates[@]} layout dirs (${candidates[*]##*/}); pass the one to check, e.g. tools/verify_layout.sh ${candidates[0]##*/}" >&2; exit 1; }
     LAYOUT_DIR="${candidates[0]}"
 fi
+[ -f "$LAYOUT_DIR/keymap.c" ] || { echo "verify_layout: ERROR: no keymap.c in $LAYOUT_DIR" >&2; exit 1; }
+LAYOUT_ID="$(basename "$(cd "$LAYOUT_DIR" && pwd)")"
+SNAPSHOT="$REPO_ROOT/tools/snapshots/$LAYOUT_ID.json"
+[ "$UPDATE" -eq 0 ] || mkdir -p "$(dirname "$SNAPSHOT")"
 
-UPDATE="$UPDATE" python3 - "$LAYOUT_DIR" "$REPO_ROOT/tools/layers.conf" "$REPO_ROOT/tools/layout.snapshot.json" <<'PY'
+UPDATE="$UPDATE" python3 - "$LAYOUT_DIR" "$REPO_ROOT/tools/layers.conf" "$SNAPSHOT" <<'PY'
 import hashlib, json, os, re, sys
 
 layout_dir, layers_conf, snapshot_path = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -167,7 +173,7 @@ if os.path.exists(snapshot_path):
         print(f"  (snapshot unreadable: {e})")
 
 if old is None:
-    print("  no snapshot yet -- run tools/verify_layout.sh --update to record one")
+    print(f"  no snapshot yet for {summary['layout_dir']} -- run tools/verify_layout.sh --update {summary['layout_dir']} to record one")
 else:
     changes = []
     if old.get("revision") != summary["revision"]:

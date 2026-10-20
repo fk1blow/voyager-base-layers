@@ -87,7 +87,7 @@ Afterwards — all of this is what `tools/refresh.sh` automates:
 
 1. **`git pull`** — the workflow already committed and pushed the refreshed layout.
 2. **Read the diff** printed by the *Verify layout assumptions* step. If the change was
-   intentional, `tools/verify_layout.sh --update` and commit the snapshot. That is what makes
+   intentional, `tools/verify_layout.sh --update <layout-id>` and commit `tools/snapshots/<layout-id>.json`. That is what makes
    the next run's diff meaningful, and it is the only thing left for you to commit.
 3. **If you renumbered a base layer in Oryx**, update `tools/layers.conf` and re-run
    `host/install.sh`. The indices are deliberately duplicated between firmware and host, and

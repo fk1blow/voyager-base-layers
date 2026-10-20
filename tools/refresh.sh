@@ -4,6 +4,7 @@
 #   tools/refresh.sh [--os-detection] [--keyboard-reset] [-l ID] [-o DIR]
 #                    [--no-install] [--yes] [--dry-run]
 #
+# -l ID picks the Oryx layout; without it, the workflow's default layout_id.
 # Dispatches the Fetch and build layout workflow, waits for it, pulls what it
 # pushed, shows the layout diff, runs the checks, re-runs host/install.sh, and
 # leaves the binary in build/. Flashing stays manual: Keymapp is a GUI, and
@@ -12,7 +13,7 @@ set -euo pipefail
 
 WORKFLOW=fetch-and-build-layout.yml
 ARTIFACT_GEOMETRY=voyager
-LAYOUT_ID=7m5PJ
+LAYOUT_ID=""   # default: the workflow's layout_id default, read below
 OUT_DIR=""
 OS_DETECTION=0
 KEYBOARD_RESET=0
@@ -30,7 +31,7 @@ while [ $# -gt 0 ]; do
         --dry-run)        DRY_RUN=1 ;;
         -l|--layout-id)   shift; LAYOUT_ID="${1:?--layout-id needs a value}" ;;
         -o|--out)         shift; OUT_DIR="${1:?--out needs a value}" ;;
-        -h|--help)        sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)        sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
     shift
@@ -39,6 +40,7 @@ done
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 [ -n "$OUT_DIR" ] || OUT_DIR="$REPO_ROOT/build"
+
 
 step() { printf '\n== %s\n' "$*"; }
 say()  { printf '   %s\n' "$*"; }
@@ -54,6 +56,17 @@ confirm() {
     read -r -p "   $1 [y/N] " reply
     [ "$reply" = y ] || [ "$reply" = Y ]
 }
+
+# One place sets the default layout: the workflow's layout_id input.
+if [ -z "$LAYOUT_ID" ]; then
+    LAYOUT_ID="$(sed -n '/^ *layout_id:/,/^ *[a-z_]*:$/s/^ *default: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' \
+        ".github/workflows/$WORKFLOW" | head -1)"
+    [ -n "$LAYOUT_ID" ] || die "no layout_id default in .github/workflows/$WORKFLOW -- pass -l ID"
+fi
+case "$LAYOUT_ID" in
+    *[!A-Za-z0-9]*) die "layout id '$LAYOUT_ID' should be letters and digits only, as in the Oryx URL" ;;
+esac
+SNAPSHOT="tools/snapshots/$LAYOUT_ID.json"
 
 # ---------------------------------------------------------------- preflight
 step "Preflight"
@@ -121,29 +134,30 @@ fi
 step "Pulling what the workflow pushed"
 git pull --ff-only --quiet origin main
 say "main is now $(git rev-parse --short HEAD): $(git log -1 --pretty=%s)"
+[ -f "$LAYOUT_ID/keymap.c" ] || die "the run passed but $LAYOUT_ID/keymap.c is not on main -- check the run log"
 
 # ---------------------------------------------------------------- the diff
 step "Layout diff"
 VERIFY_OUT="$(mktemp)"
 trap 'rm -f "$VERIFY_OUT"' EXIT
-if ! ./tools/verify_layout.sh | tee "$VERIFY_OUT"; then
+if ! ./tools/verify_layout.sh "$LAYOUT_ID" | tee "$VERIFY_OUT"; then
     die "verify_layout.sh rejected the layout -- fix tools/layers.conf before flashing"
 fi
 
-if grep -q "changes since the last reviewed snapshot" "$VERIFY_OUT"; then
+if grep -qE "changes since the last reviewed snapshot|no snapshot yet" "$VERIFY_OUT"; then
     echo
     say "the layout changed. Record it so the next run's diff stays meaningful."
     if grep -qE "layer [0-9]+: (new|removed)|layer count" "$VERIFY_OUT"; then
         say "NOTE: layers were added or removed. If you renumbered a base, edit"
         say "      tools/layers.conf now -- the host and the firmware must agree."
     fi
-    if confirm "Record tools/layout.snapshot.json and commit it?"; then
-        ./tools/verify_layout.sh --update >/dev/null
-        git add tools/layout.snapshot.json
-        git commit -m "Record the reviewed layout snapshot" --quiet
+    if confirm "Record $SNAPSHOT and commit it?"; then
+        ./tools/verify_layout.sh --update "$LAYOUT_ID" >/dev/null
+        git add "$SNAPSHOT"
+        git commit -m "Record the reviewed $LAYOUT_ID layout snapshot" --quiet
         say "committed -- push when you are happy with it"
     else
-        say "skipped; run tools/verify_layout.sh --update yourself when ready"
+        say "skipped; run tools/verify_layout.sh --update $LAYOUT_ID yourself when ready"
     fi
 fi
 

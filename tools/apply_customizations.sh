@@ -51,7 +51,7 @@ note() { echo "apply_customizations: $*"; }
 if [ -z "$LAYOUT_DIR" ]; then
     # the one directory holding a keymap.c that Oryx generated
     mapfile -t candidates < <(find "$REPO_ROOT" -maxdepth 2 -name keymap.c -not -path '*/qmk_firmware/*' -printf '%h\n' | sort -u)
-    [ "${#candidates[@]}" -eq 1 ] || die "expected exactly one layout dir with keymap.c, found ${#candidates[@]}: ${candidates[*]:-none}"
+    [ "${#candidates[@]}" -eq 1 ] || die "found ${#candidates[@]} layout dirs (${candidates[*]:-none}); pass the one to customize, e.g. tools/apply_customizations.sh ${candidates[0]##*/}"
     LAYOUT_DIR="${candidates[0]}"
 fi
 [ -d "$LAYOUT_DIR" ] || die "layout dir not found: $LAYOUT_DIR"

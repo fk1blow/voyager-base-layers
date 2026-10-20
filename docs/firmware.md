@@ -30,8 +30,8 @@ hand. The steps below are what it automates.
    have to notice this yourself.
 6. The workflow has **already committed and pushed** the refreshed layout — it does that
    before it verifies or builds. Read the diff the **Verify layout assumptions** step printed;
-   if the change was intentional, run `tools/verify_layout.sh --update` locally and commit the
-   updated `tools/layout.snapshot.json`. That snapshot is the only thing left for you to
+   if the change was intentional, run `tools/verify_layout.sh --update <layout-id>` locally and
+   commit the updated `tools/snapshots/<layout-id>.json`. That snapshot is the only thing left for you to
    commit, and it is what makes the next run's diff meaningful.
 7. Download the `.bin` artifact and flash it with Keymapp.
 8. Re-check: `voyager-layer status`, LEDs dark on both bases, and the per-key amber indicator

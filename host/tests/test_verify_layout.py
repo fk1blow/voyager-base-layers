@@ -66,11 +66,30 @@ class VerifyLayout(unittest.TestCase):
     # ------------------------------------------------------------------
     def test_snapshot_records_base_fingerprints(self):
         self.record(MAC, SYM, OMARCHY, NAV)
-        with open(os.path.join(self.root, "tools", "layout.snapshot.json")) as f:
+        with open(os.path.join(self.root, "tools", "snapshots", "fake.json")) as f:
             snap = json.load(f)
         self.assertEqual(set(snap["bases"]), {"mac", "omarchy"})
         self.assertEqual(snap["bases"]["omarchy"]["index"], 2)
         self.assertTrue(snap["bases"]["omarchy"]["hash"])
+
+    def test_each_layout_has_its_own_snapshot(self):
+        self.record(MAC, SYM, OMARCHY, NAV)
+        os.makedirs(os.path.join(self.root, "other"))
+        shutil.copy(os.path.join(self.root, "fake", "config.h"), os.path.join(self.root, "other"))
+        with open(os.path.join(self.root, "other", "keymap.c"), "w") as f:
+            f.write("".join(f"  [{i}] = LAYOUT_voyager({p}),\n"
+                            for i, p in enumerate((OMARCHY, SYM, MAC, NAV))))
+        # a different layout is not compared against fake's snapshot ...
+        r = subprocess.run([os.path.join(self.root, "tools", "verify_layout.sh"),
+                            os.path.join(self.root, "other")], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("no snapshot yet for other", r.stdout)
+        # ... and recording it leaves fake's snapshot alone
+        subprocess.run([os.path.join(self.root, "tools", "verify_layout.sh"), "--update",
+                        os.path.join(self.root, "other")], check=True, capture_output=True)
+        with open(os.path.join(self.root, "tools", "snapshots", "fake.json")) as f:
+            self.assertEqual(json.load(f)["layout_dir"], "fake")
+        self.assertTrue(os.path.exists(os.path.join(self.root, "tools", "snapshots", "other.json")))
 
     def test_reordered_base_is_a_hard_failure(self):
         self.record(MAC, SYM, OMARCHY, NAV)

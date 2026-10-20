@@ -93,11 +93,11 @@ cue left. If it is stuck on the Mac row while you are on Omarchy, the RGB edit i
 Run the checks:
 
 ```
-./tools/verify_layout.sh          # layer count, per-layer key counts, thumb keys
-./tools/check.sh                  # the above plus tests, syntax and a dry run
+./tools/verify_layout.sh 7m5PJ    # layer count, per-layer key counts, thumb keys
+./tools/check.sh                  # every layout: the above plus tests, syntax and a dry run
 ```
 
-`verify_layout.sh` diffs against `tools/layout.snapshot.json` and prints what changed. If you
+`verify_layout.sh <layout-id>` diffs against `tools/snapshots/<layout-id>.json` and prints what changed. If you
 renumbered a base layer, update `tools/layers.conf`, rebuild, reflash, and re-run
 `host/install.sh`.
 
