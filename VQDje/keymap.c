@@ -24,8 +24,8 @@ enum tap_dance_codes {
   DANCE_3,
 };
 
-#define DUAL_FUNC_0 LT(6, KC_I)
-#define DUAL_FUNC_1 LT(9, KC_F21)
+#define DUAL_FUNC_0 LT(2, KC_Y)
+#define DUAL_FUNC_1 LT(15, KC_F)
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [0] = LAYOUT_voyager(
@@ -33,7 +33,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     KC_TAB,         KC_Q,           KC_W,           KC_E,           KC_R,           KC_T,                                           KC_Y,           KC_U,           KC_I,           KC_O,           KC_P,           KC_BSLS,        
     KC_LEFT_SHIFT,  KC_A,           KC_S,           KC_D,           KC_F,           KC_G,                                           KC_H,           KC_J,           KC_K,           KC_L,           KC_SCLN,        MT(MOD_RSFT, KC_QUOTE),
     MT(MOD_LCTL, KC_ESCAPE),KC_Z,           KC_X,           KC_C,           KC_V,           KC_B,                                           KC_N,           KC_M,           KC_COMMA,       KC_DOT,         KC_SLASH,       KC_ENTER,       
-                                                    LM(7,MOD_LGUI), LT(4, KC_SPACE),                                MT(MOD_RSFT, KC_BSPC),LT(1, KC_SPACE)
+                                                    LM(7,MOD_LGUI), MT(MOD_LSFT, KC_SPACE),                                LT(4, KC_BSPC), LT(1, KC_SPACE)
   ),
   [1] = LAYOUT_voyager(
     KC_TRANSPARENT, LALT(KC_1),     LALT(KC_2),     LALT(KC_3),     LALT(KC_4),     KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, RALT(KC_BSPC),  
@@ -113,11 +113,11 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
             return TAPPING_TERM -25;
         case KC_X:
             return TAPPING_TERM -25;
-        case LT(4, KC_SPACE):
+        case MT(MOD_LSFT, KC_SPACE):
             return TAPPING_TERM -50;
         case MT(MOD_RSFT, KC_QUOTE):
             return TAPPING_TERM -50;
-        case MT(MOD_RSFT, KC_BSPC):
+        case LT(4, KC_BSPC):
             return TAPPING_TERM -25;
         case LT(1, KC_SPACE):
             return TAPPING_TERM -20;
