@@ -24,8 +24,8 @@ enum tap_dance_codes {
   DANCE_3,
 };
 
-#define DUAL_FUNC_0 LT(8, KC_F13)
-#define DUAL_FUNC_1 LT(5, KC_U)
+#define DUAL_FUNC_0 LT(8, KC_O)
+#define DUAL_FUNC_1 LT(5, KC_I)
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [0] = LAYOUT_voyager(
@@ -118,7 +118,7 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
         case MT(MOD_RSFT, KC_QUOTE):
             return TAPPING_TERM -50;
         case LT(4, KC_BSPC):
-            return TAPPING_TERM -25;
+            return TAPPING_TERM -50;
         case LT(1, KC_SPACE):
             return TAPPING_TERM -20;
         case MO(4):
