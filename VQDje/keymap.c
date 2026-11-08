@@ -24,8 +24,9 @@ enum tap_dance_codes {
   DANCE_3,
 };
 
-#define DUAL_FUNC_0 LT(15, KC_F6)
-#define DUAL_FUNC_1 LT(6, KC_Q)
+#define DUAL_FUNC_0 LT(8, KC_F11)
+#define DUAL_FUNC_1 LT(5, KC_F22)
+#define DUAL_FUNC_2 LT(2, KC_F22)
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [0] = LAYOUT_voyager(
@@ -53,7 +54,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     KC_TRANSPARENT, LALT(LCTL(LSFT(KC_1))),LALT(LCTL(LSFT(KC_2))),LALT(LCTL(LSFT(KC_3))),LALT(LCTL(LSFT(KC_4))),KC_TRANSPARENT,                                 RGUI(RSFT(KC_LEFT)),RGUI(KC_LEFT),  RGUI(KC_RIGHT), RGUI(RSFT(KC_RIGHT)),KC_TRANSPARENT, RCTL(KC_BSPC),  
     KC_TRANSPARENT, KC_TRANSPARENT, LCTL(KC_W),     KC_TRANSPARENT, KC_TRANSPARENT, TD(DANCE_2),                                    RCTL(KC_LEFT),  KC_MS_WH_DOWN,  KC_MS_WH_UP,    RCTL(KC_RIGHT), KC_TRANSPARENT, KC_AUDIO_VOL_UP,
     KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, TD(DANCE_3),    KC_TRANSPARENT,                                 KC_LEFT,        KC_DOWN,        KC_UP,          KC_RIGHT,       KC_TRANSPARENT, KC_AUDIO_VOL_DOWN,
-    KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 DUAL_FUNC_1,    RCTL(RSFT(KC_TAB)),RCTL(KC_TAB),   RCTL(KC_W),     RCTL(RSFT(KC_T)),KC_AUDIO_MUTE,  
+    KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT, KC_TRANSPARENT,                                 DUAL_FUNC_1,    RCTL(RSFT(KC_TAB)),RCTL(KC_TAB),   DUAL_FUNC_2,    RCTL(RSFT(KC_T)),KC_AUDIO_MUTE,  
                                                     KC_TRANSPARENT, KC_TRANSPARENT,                                 KC_TRANSPARENT, KC_TRANSPARENT
   ),
   [4] = LAYOUT_voyager(
@@ -465,6 +466,21 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
           register_code16(RCTL(KC_N));
         } else {
           unregister_code16(RCTL(KC_N));
+        }  
+      }  
+      return false;
+    case DUAL_FUNC_2:
+      if (record->tap.count > 0) {
+        if (record->event.pressed) {
+          register_code16(RCTL(KC_W));
+        } else {
+          unregister_code16(RCTL(KC_W));
+        }
+      } else {
+        if (record->event.pressed) {
+          register_code16(RCTL(RSFT(KC_W)));
+        } else {
+          unregister_code16(RCTL(RSFT(KC_W)));
         }  
       }  
       return false;
